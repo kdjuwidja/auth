@@ -10,10 +10,12 @@ import (
 	"strings"
 
 	"github.com/go-oauth2/oauth2/v4/errors"
+	"github.com/go-oauth2/oauth2/v4/generates"
 	"github.com/go-oauth2/oauth2/v4/manage"
 	"github.com/go-oauth2/oauth2/v4/models"
 	"github.com/go-oauth2/oauth2/v4/server"
 	"github.com/go-oauth2/oauth2/v4/store"
+	"github.com/golang-jwt/jwt"
 	"github.com/rs/cors"
 	"netherealmstudio.com/m/v2/db"
 	"netherealmstudio.com/m/v2/statestore"
@@ -28,6 +30,7 @@ type Config struct {
 	CORSOrigins string
 	CORSMethods string
 	CORSHeaders string
+	JWTSecret   string
 }
 
 func getConfig() *Config {
@@ -40,6 +43,7 @@ func getConfig() *Config {
 		CORSOrigins: getEnvOrDefault("CORS_ORIGINS", "http://localhost:3000"),
 		CORSMethods: getEnvOrDefault("CORS_METHODS", "GET,POST,PUT,DELETE,OPTIONS"),
 		CORSHeaders: getEnvOrDefault("CORS_HEADERS", "Origin,Content-Type,Accept,Authorization"),
+		JWTSecret:   getEnvOrDefault("JWT_SECRET", "your-secret-key"),
 	}
 }
 
@@ -73,8 +77,12 @@ func main() {
 	}
 
 	manager := manage.NewDefaultManager()
+
 	// token memory store
 	manager.MustTokenStorage(store.NewMemoryTokenStore())
+
+	// Configure JWT token generation
+	manager.MapAccessGenerate(generates.NewJWTAccessGenerate("jwt-key", []byte(config.JWTSecret), jwt.SigningMethodHS256))
 
 	// client memory store
 	clientStore := store.NewClientStore()
@@ -105,7 +113,12 @@ func main() {
 		fmt.Println("username:", username)
 		fmt.Println("password:", password)
 
-		return "000000", nil
+		user, err := db.ValidateUser(dbConn, username, password)
+		if err != nil {
+			return "000000", err
+		}
+
+		return user.ID, nil
 	}
 
 	srv.SetInternalErrorHandler(func(err error) (re *errors.Response) {
