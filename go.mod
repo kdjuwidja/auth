@@ -3,16 +3,14 @@ module netherealmstudio.com/m/v2
 go 1.24.0
 
 require (
-	github.com/go-oauth2/oauth2 v3.9.2+incompatible
 	github.com/go-oauth2/oauth2/v4 v4.5.2
 	github.com/go-sql-driver/mysql v1.7.1
-	github.com/golang-jwt/jwt/v5 v5.2.1
+	github.com/golang-jwt/jwt v3.2.1+incompatible
 	github.com/rs/cors v1.11.1
 	golang.org/x/crypto v0.36.0
 )
 
 require (
-	github.com/golang-jwt/jwt v3.2.1+incompatible // indirect
 	github.com/google/uuid v1.1.1 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/tidwall/btree v0.0.0-20191029221954-400434d76274 // indirect
