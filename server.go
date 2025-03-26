@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"html/template"
 	"log"
@@ -12,12 +11,15 @@ import (
 	"github.com/go-oauth2/oauth2/v4/errors"
 	"github.com/go-oauth2/oauth2/v4/generates"
 	"github.com/go-oauth2/oauth2/v4/manage"
-	"github.com/go-oauth2/oauth2/v4/models"
+	oauthmodels "github.com/go-oauth2/oauth2/v4/models"
 	"github.com/go-oauth2/oauth2/v4/server"
 	"github.com/go-oauth2/oauth2/v4/store"
 	"github.com/golang-jwt/jwt"
 	"github.com/rs/cors"
-	"netherealmstudio.com/m/v2/db"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"netherealmstudio.com/m/v2/models"
 	"netherealmstudio.com/m/v2/statestore"
 )
 
@@ -39,7 +41,7 @@ func getConfig() *Config {
 		DBPassword:  getEnvOrDefault("USER_DB_PASSWORD", "password"),
 		DBHost:      getEnvOrDefault("USER_DB_HOST", "localhost"),
 		DBPort:      getEnvOrDefault("USER_DB_PORT", "3306"),
-		DBName:      getEnvOrDefault("USER_DB_NAME", "oauth2"),
+		DBName:      getEnvOrDefault("USER_DB_NAME", "ai_shopper_auth"),
 		CORSOrigins: getEnvOrDefault("CORS_ORIGINS", "http://localhost:3000"),
 		CORSMethods: getEnvOrDefault("CORS_METHODS", "GET,POST,PUT,DELETE,OPTIONS"),
 		CORSHeaders: getEnvOrDefault("CORS_HEADERS", "Origin,Content-Type,Accept,Authorization"),
@@ -54,7 +56,128 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
+func validateUser(dbConn *gorm.DB, email, password string) (string, error) {
+	var user models.User
+	result := dbConn.Where("email = ?", email).First(&user)
+	if result.Error != nil {
+		return "000000", result.Error
+	}
+
+	if result.RowsAffected == 0 {
+		return "000000", errors.New("user not found")
+	}
+
+	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	if err != nil {
+		return "000000", fmt.Errorf("invalid password")
+	}
+
+	fmt.Printf("ValidateUser %v successfully\n", user)
+	return user.ID, nil
+}
+
+func initializeDB(config *Config) (*gorm.DB, error) {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
+		config.DBUser, config.DBPassword, config.DBHost, config.DBPort, config.DBName)
+
+	dbConn, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	//auto migrate models
+	fmt.Println("Auto migrating models")
+	dbConn.AutoMigrate(&models.APIClient{}, &models.User{})
+	fmt.Println("Models migrated")
+
+	return dbConn, nil
+}
+
+func initializeAPIClientStore(dbConn *gorm.DB, isLocalDev bool) (*store.ClientStore, error) {
+	clientStore := store.NewClientStore()
+
+	result := dbConn.Find(&models.APIClient{})
+	if result.Error != nil {
+		return nil, fmt.Errorf("error loading clients: %v", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		if isLocalDev {
+			//create default local dev client
+			defaultClientId := getEnvOrDefault("DEFAULT_CLIENT_ID", "82ce1a881b304775ad288e57e41387f3")
+			defaultClientSecret := getEnvOrDefault("DEFAULT_CLIENT_SECRET", "my_secret")
+			defaultClientDomain := getEnvOrDefault("DEFAULT_CLIENT_DOMAIN", "http://localhost:3000")
+			defaultIsPublic := getEnvOrDefault("DEFAULT_IS_PUBLIC", "1")
+			defaultDescription := getEnvOrDefault("DEFAULT_DESCRIPTION", "Default client for ai_shopper_depot")
+
+			client := models.APIClient{
+				ID:          defaultClientId,
+				Secret:      defaultClientSecret,
+				Domain:      defaultClientDomain,
+				IsPublic:    defaultIsPublic == "1",
+				Description: defaultDescription,
+			}
+			dbConn.Create(&client)
+
+			clientStore.Set(client.ID, &oauthmodels.Client{
+				ID:     client.ID,
+				Secret: client.Secret,
+				Domain: client.Domain,
+			})
+		} else {
+			return nil, fmt.Errorf("no clients found")
+		}
+	} else {
+		// Retrieve all clients from db and set to client store
+		var clients []models.APIClient
+		result.Scan(&clients)
+		for _, client := range clients {
+			clientStore.Set(client.ID, &oauthmodels.Client{
+				ID:     client.ID,
+				Secret: client.Secret,
+				Domain: client.Domain,
+			})
+
+			log.Println("Client:", client.ID, client.Secret, client.Domain)
+		}
+	}
+
+	return clientStore, nil
+}
+
+func createLocalDevUser(dbConn *gorm.DB) error {
+	var count int64
+	result := dbConn.Find(&models.User{}).Count(&count)
+	if result.Error != nil {
+		return fmt.Errorf("failed to access user table: %v", result.Error)
+	}
+
+	if count == 0 {
+		user1 := models.User{
+			ID:       "eb5dc850f1fb40a8b9b2bffd89c6a32d",
+			Email:    "kdjuwidja@netherrealmstudio.com",
+			Password: "$2a$10$vZU8LUTitjbU.FrFHIVkkuF7Gb6SrF3Zz0Eqq5coet/MuYEzRQ2Qm",
+			IsActive: true,
+		}
+		user2 := models.User{
+			ID:       "73064f370eda46a48a86e1fd8118be4c",
+			Email:    "timmyk@netherrealmstudio.com",
+			Password: "$2a$10$s5jg5gL1/2tWDOX5JcgWk.wqZR8kTxb46X3thb8JIsaD6HVYtpKGG",
+			IsActive: true,
+		}
+		if err := dbConn.Create(&user1).Error; err != nil {
+			return fmt.Errorf("failed to create user1: %v", err)
+		}
+		if err := dbConn.Create(&user2).Error; err != nil {
+			return fmt.Errorf("failed to create user2: %v", err)
+		}
+	}
+	return nil
+}
+
 func main() {
+	isLocalDev := getEnvOrDefault("IS_LOCAL_DEV", "false") == "true"
+
 	config := getConfig()
 
 	// Load templates
@@ -63,17 +186,10 @@ func main() {
 	// Initialize state store
 	stateStore := statestore.NewStateStore()
 
-	// Database connection
-	dbConn, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
-		config.DBUser, config.DBPassword, config.DBHost, config.DBPort, config.DBName))
+	//initialize db connection
+	dbConn, err := initializeDB(config)
 	if err != nil {
-		log.Fatalf("Error connecting to database: %v", err)
-	}
-	defer dbConn.Close()
-
-	// Test database connection
-	if err := dbConn.Ping(); err != nil {
-		log.Fatalf("Error pinging database: %v", err)
+		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
 	manager := manage.NewDefaultManager()
@@ -84,21 +200,10 @@ func main() {
 	// Configure JWT token generation
 	manager.MapAccessGenerate(generates.NewJWTAccessGenerate("jwt-key", []byte(config.JWTSecret), jwt.SigningMethodHS256))
 
-	// client memory store
-	clientStore := store.NewClientStore()
-	clients, err := db.GetClients(dbConn)
+	// Initialize API client store
+	clientStore, err := initializeAPIClientStore(dbConn, isLocalDev)
 	if err != nil {
-		log.Fatalf("Error loading clients: %v", err)
-	}
-
-	for _, client := range clients {
-		clientStore.Set(client.ID, &models.Client{
-			ID:     client.ID,
-			Secret: client.Secret,
-			Domain: client.Domain,
-		})
-
-		log.Println("Client:", client.ID, client.Secret, client.Domain)
+		log.Fatalf("Failed to initialize API client store: %v", err)
 	}
 	manager.MapClientStorage(clientStore)
 
@@ -106,19 +211,22 @@ func main() {
 	srv.SetAllowGetAccessRequest(true)
 	srv.SetClientInfoHandler(server.ClientFormHandler)
 
+	//create default local dev user
+	if isLocalDev {
+		if err := createLocalDevUser(dbConn); err != nil {
+			log.Fatalf("Failed to create local dev users: %v", err)
+		}
+	}
+
+	//initialize handlers
 	srv.UserAuthorizationHandler = func(w http.ResponseWriter, r *http.Request) (userID string, err error) {
-		username := r.PostFormValue("username")
+		email := r.PostFormValue("email")
 		password := r.PostFormValue("password")
 
-		fmt.Println("username:", username)
+		fmt.Println("email:", email)
 		fmt.Println("password:", password)
 
-		user, err := db.ValidateUser(dbConn, username, password)
-		if err != nil {
-			return "000000", err
-		}
-
-		return user.ID, nil
+		return validateUser(dbConn, email, password)
 	}
 
 	srv.SetInternalErrorHandler(func(err error) (re *errors.Response) {
