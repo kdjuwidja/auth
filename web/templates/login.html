@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="/static/css/output.css" rel="stylesheet">
+</head>
+<body class="font-sans flex justify-center items-center min-h-screen m-0 bg-gray-100 p-4">
+    <div class="bg-white p-4 sm:p-6 md:p-8 rounded-lg shadow-md w-full max-w-md mx-auto">
+        <h2 class="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-center">Login</h2>
+        {{if .Error}}
+        <div class="text-red-600 mb-4 p-2 bg-red-100 rounded border border-red-200 text-sm sm:text-base">
+            {{.Error}}
+        </div>
+        {{end}}
+        <form method="POST" action="/authorize">
+            <input type="hidden" name="client_id" value="{{.ClientID}}">
+            <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
+            <input type="hidden" name="state" value="{{.State}}">
+            <input type="hidden" name="scope" value="{{.Scope}}">
+            <input type="hidden" name="response_type" value="{{.ResponseType}}">
+
+            <div class="mb-3 sm:mb-4">
+                <label for="email" class="block mb-1 sm:mb-2 text-sm sm:text-base">Email:</label>
+                <input type="text" id="email" name="email" required 
+                       class="w-full p-2 border border-gray-300 rounded box-border text-sm sm:text-base">
+            </div>
+            
+            <div class="mb-3 sm:mb-4">
+                <label for="password" class="block mb-1 sm:mb-2 text-sm sm:text-base">Password:</label>
+                <input type="password" id="password" name="password" required 
+                       class="w-full p-2 border border-gray-300 rounded box-border text-sm sm:text-base">
+            </div>
+            
+            <button type="submit" 
+                    class="w-full p-2 sm:p-3 bg-blue-600 text-white border-none rounded cursor-pointer hover:bg-blue-700 transition-colors text-sm sm:text-base">
+                Login
+            </button>
+        </form>
+    </div>
+</body>
+</html> 

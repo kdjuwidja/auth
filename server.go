@@ -181,7 +181,7 @@ func main() {
 	config := getConfig()
 
 	// Load templates
-	tmpl := template.Must(template.ParseFiles("templates/login.html"))
+	tmpl := template.Must(template.ParseFiles("web/templates/login.html"))
 
 	// Initialize state store
 	stateStore := statestore.NewStateStore()
@@ -249,6 +249,10 @@ func main() {
 
 	// Create a new mux for handling routes
 	mux := http.NewServeMux()
+
+	// Serve static files
+	fs := http.FileServer(http.Dir("./web/static"))
+	mux.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
