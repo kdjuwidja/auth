@@ -46,11 +46,24 @@
         button:hover {
             background-color: #0056b3;
         }
+        .error-message {
+            color: #dc3545;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background-color: #f8d7da;
+            border-radius: 4px;
+            border: 1px solid #f5c6cb;
+        }
     </style>
 </head>
 <body>
     <div class="login-container">
         <h2>Login</h2>
+        {{if .Error}}
+        <div class="error-message">
+            {{.Error}}
+        </div>
+        {{end}}
         <form method="POST" action="/authorize">
             <input type="hidden" name="client_id" value="{{.ClientID}}">
             <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">

@@ -279,12 +279,14 @@ func main() {
 				State        string
 				ResponseType string
 				Scope        string
+				Error        string
 			}{
 				ClientID:     clientID,
 				RedirectURI:  redirectURI,
 				State:        state,
 				ResponseType: responseType,
 				Scope:        scope,
+				Error:        r.URL.Query().Get("error"),
 			}
 
 			if err := tmpl.Execute(w, data); err != nil {
