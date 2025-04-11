@@ -9,18 +9,17 @@ import (
 	"strings"
 
 	"github.com/go-oauth2/oauth2/v4/errors"
-	"github.com/go-oauth2/oauth2/v4/generates"
 	"github.com/go-oauth2/oauth2/v4/manage"
 	oauthmodels "github.com/go-oauth2/oauth2/v4/models"
 	"github.com/go-oauth2/oauth2/v4/server"
 	"github.com/go-oauth2/oauth2/v4/store"
-	"github.com/golang-jwt/jwt"
 	"github.com/rs/cors"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"netherealmstudio.com/m/v2/models"
 	"netherealmstudio.com/m/v2/statestore"
+	"netherealmstudio.com/m/v2/token"
 )
 
 type Config struct {
@@ -197,8 +196,9 @@ func main() {
 	// token memory store
 	manager.MustTokenStorage(store.NewMemoryTokenStore())
 
-	// Configure JWT token generation
-	manager.MapAccessGenerate(generates.NewJWTAccessGenerate("jwt-key", []byte(config.JWTSecret), jwt.SigningMethodHS256))
+	// Configure JWT token generation with custom claims
+	tokenGenerator := token.NewTokenGenerator("jwt-key", []byte(config.JWTSecret))
+	manager.MapAccessGenerate(tokenGenerator)
 
 	// Initialize API client store
 	clientStore, err := initializeAPIClientStore(dbConn, isLocalDev)
@@ -222,11 +222,16 @@ func main() {
 	srv.UserAuthorizationHandler = func(w http.ResponseWriter, r *http.Request) (userID string, err error) {
 		email := r.PostFormValue("email")
 		password := r.PostFormValue("password")
-
 		fmt.Println("email:", email)
 		fmt.Println("password:", password)
 
-		return validateUser(dbConn, email, password)
+		//TODO: request scope from client, then verify scope with db
+		userID, err = validateUser(dbConn, email, password)
+		if err != nil {
+			return "", err
+		}
+
+		return userID, nil
 	}
 
 	srv.SetInternalErrorHandler(func(err error) (re *errors.Response) {
