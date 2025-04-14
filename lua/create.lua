@@ -16,9 +16,6 @@ if reply['err'] ~= nil then
     return 'ERROR: failed to get access tokens'
 end
 
-redis.log(redis.LOG_WARNING, "KEY REPLY: " .. #reply)
-redis.log(redis.LOG_WARNING, "MAX NUM KEYS: " .. maxNumKeys)
-
 if #reply >= maxNumKeys then
     return "ERROR: too many access tokens"
 end
