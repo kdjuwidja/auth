@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/go-oauth2/oauth2/v4"
 	"github.com/go-oauth2/oauth2/v4/errors"
 	"github.com/go-oauth2/oauth2/v4/models"
 	"github.com/kdjuwidja/aishoppercommon/logger"
+	"github.com/kdjuwidja/aishoppercommon/osutil"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -92,9 +94,11 @@ func (jwtts *JWTTokenStore) Create(ctx context.Context, info oauth2.TokenInfo) e
 		return err
 	}
 
+	maxNumKeys := osutil.GetEnvInt("MAX_NUM_KEYS", 5)
+
 	reply, err := jwtts.executiveScript(ctx, jwtts.script, []string{},
 		info.GetUserID(),
-		"5",
+		strconv.Itoa(maxNumKeys),
 		info.GetCode(),
 		info.GetAccess(),
 		info.GetRefresh(),
