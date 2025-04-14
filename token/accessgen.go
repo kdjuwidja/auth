@@ -6,23 +6,23 @@ import (
 
 	"github.com/go-oauth2/oauth2/v4"
 	"github.com/go-oauth2/oauth2/v4/generates"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // TokenGenerator handles JWT token generation
-type TokenGenerator struct {
+type AccessTokenGenerator struct {
 	*generates.JWTAccessGenerate
 }
 
-// NewTokenGenerator creates a new token generator
-func NewTokenGenerator(key string, secret []byte) *TokenGenerator {
-	return &TokenGenerator{
+// NewAccessTokenGenerator creates a new token generator
+func NewJWTTokenGenerator(key string, secret []byte) *AccessTokenGenerator {
+	return &AccessTokenGenerator{
 		JWTAccessGenerate: generates.NewJWTAccessGenerate(key, secret, jwt.SigningMethodHS256),
 	}
 }
 
 // Token generates a new JWT token
-func (g *TokenGenerator) Token(ctx context.Context, data *oauth2.GenerateBasic, isGenRefresh bool) (string, string, error) {
+func (g *AccessTokenGenerator) Token(ctx context.Context, data *oauth2.GenerateBasic, isGenRefresh bool) (string, string, error) {
 	// Get the scope from the request
 	scope := data.Request.FormValue("scope")
 	if scope == "" {

@@ -48,6 +48,7 @@ COPY --from=go-builder /app/main .
 #COPY the static files for tailwind css
 COPY --from=go-builder /app/web/static ./web/static
 COPY --from=go-builder /app/web/templates ./web/templates
+COPY --from=go-builder /app/lua ./lua
 
 # Expose port 9096
 EXPOSE 9096

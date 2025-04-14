@@ -9,6 +9,7 @@ import (
 	"github.com/go-oauth2/oauth2/v4/store"
 	"github.com/kdjuwidja/aishoppercommon/logger"
 	"github.com/kdjuwidja/aishoppercommon/osutil"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 	dbmodel "netherealmstudio.com/m/v2/db"
 	"netherealmstudio.com/m/v2/statestore"
@@ -36,13 +37,28 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 	goAuth.statestore = statestore.NewStateStore()
 	goAuth.manager = manage.NewDefaultManager()
 
+	redisHost := osutil.GetEnvString("REDIS_HOST", "localhost")
+	redisPort := osutil.GetEnvString("REDIS_PORT", "6379")
+	redisUser := osutil.GetEnvString("REDIS_USER", "default")
+	redisPassword := osutil.GetEnvString("REDIS_PASSWORD", "password")
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+		Password: redisPassword,
+		Username: redisUser,
+	})
+
+	codeTTL := osutil.GetEnvInt("CODE_TTL", 300)
+	accessTTL := osutil.GetEnvInt("ACCESS_TTL", 3600)
+	refreshTTL := osutil.GetEnvInt("REFRESH_TTL", 86400)
+
 	//token memory store
-	goAuth.manager.MustTokenStorage(store.NewMemoryTokenStore())
+	goAuth.manager.MustTokenStorage(InitializeJWTTokenStore(redisClient, "./lua/create.lua", codeTTL, accessTTL, refreshTTL))
 
 	// Configure JWT token generation with custom claims
 	jwtSecret := osutil.GetEnvString("JWT_SECRET", "your-secret-key")
-	tokenGenerator := token.NewTokenGenerator("jwt-key", []byte(jwtSecret))
-	goAuth.manager.MapAccessGenerate(tokenGenerator)
+	accessGen := token.NewJWTTokenGenerator("jwt-key", []byte(jwtSecret))
+	goAuth.manager.MapAccessGenerate(accessGen)
 
 	// Initialize API client store
 	clientStore, err := initializeAPIClientStore(dbConn, isLocalDev)
