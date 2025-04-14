@@ -16,20 +16,17 @@ if reply['err'] ~= nil then
     return 'ERROR: failed to get access tokens'
 end
 
-local keys = 0
-if reply['res'] ~= nil then
-    keys = #reply['res']
-    if keys >= maxNumKeys then
-        return "ERROR: too many access tokens"
-    end
+redis.log(redis.LOG_WARNING, "KEY REPLY: " .. #reply)
+redis.log(redis.LOG_WARNING, "MAX NUM KEYS: " .. maxNumKeys)
+
+if #reply >= maxNumKeys then
+    return "ERROR: too many access tokens"
 end
 
-
-local keyId = keys + 1
 local err = false
 
 if code ~= nil and code ~= '' then
-    local codeKey = "code:" .. userID .. ":" .. keyId .. ":" .. code
+    local codeKey = "code:" .. userID .. ":" .. code
     local codeReply = redis.pcall('SET', codeKey, tokenInfo, "EX", codeTTL)
     redis.log(redis.LOG_DEBUG, "SETTING CODE KEY: " .. codeKey .. " " .. tokenInfo .. " " .. codeTTL)
     if codeReply['err'] ~= nil then
@@ -39,7 +36,7 @@ if code ~= nil and code ~= '' then
 end
 
 if access ~= nil and access ~= '' then
-    local accessKey = "access:" .. userID .. ":" .. keyId .. ":" .. access
+    local accessKey = "access:" .. userID .. ":" .. access
     local accessReply = redis.pcall('SET', accessKey, tokenInfo, "EX", accessTokenTTL)
     redis.log(redis.LOG_DEBUG, "SETTING ACCESS KEY: " .. accessKey .. " " .. tokenInfo .. " " .. accessTokenTTL)
     if accessReply['err'] ~= nil then
@@ -49,7 +46,7 @@ if access ~= nil and access ~= '' then
 end
 
 if refresh ~= nil and refresh ~= '' then
-    local refreshKey = "refresh:" .. userID .. ":" .. keyId .. ":" .. refresh
+    local refreshKey = "refresh:" .. userID .. ":" .. refresh
     local refreshReply = redis.pcall('SET', refreshKey, tokenInfo, "EX", refreshTokenTTL)
     redis.log(redis.LOG_DEBUG, "SETTING REFRESH KEY: " .. refreshKey .. " " .. tokenInfo .. " " .. refreshTokenTTL)
     if refreshReply['err'] ~= nil then
