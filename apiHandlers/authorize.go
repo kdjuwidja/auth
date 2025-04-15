@@ -2,9 +2,9 @@ package apiHandlers
 
 import (
 	"html/template"
-	"log"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/go-oauth2/oauth2/v4/server"
 	"github.com/kdjuwidja/aishoppercommon/logger"
 	"netherealmstudio.com/m/v2/statestore"
@@ -24,22 +24,22 @@ func InitializeAuthorizeHandler(srv *server.Server, tmpl *template.Template, sta
 	}
 }
 
-func (h *AuthorizeHandler) Handle(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
+func (h *AuthorizeHandler) Handle(c *gin.Context) {
+	switch c.Request.Method {
 	case "GET":
-		clientID := r.URL.Query().Get("client_id")
-		redirectURI := r.URL.Query().Get("redirect_uri")
-		state := r.URL.Query().Get("state")
-		responseType := r.URL.Query().Get("response_type")
+		clientID := c.Query("client_id")
+		redirectURI := c.Query("redirect_uri")
+		state := c.Query("state")
+		responseType := c.Query("response_type")
 		scope := func() string {
-			if s := r.URL.Query().Get("scope"); s != "" {
+			if s := c.Query("scope"); s != "" {
 				return s
 			}
 			return "profile"
 		}()
 
 		if clientID == "" || redirectURI == "" || state == "" {
-			http.Error(w, "Missing client_id, redirect_uri, or state", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing client_id, redirect_uri, or state"})
 			return
 		}
 
@@ -60,33 +60,33 @@ func (h *AuthorizeHandler) Handle(w http.ResponseWriter, r *http.Request) {
 			State:        state,
 			ResponseType: responseType,
 			Scope:        scope,
-			Error:        r.URL.Query().Get("error"),
+			Error:        c.Query("error"),
 		}
 
-		if err := h.tmpl.Execute(w, data); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+		if err := h.tmpl.Execute(c.Writer, data); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Template execution error"})
 			logger.Errorf("Template execution error: %v", err)
 			return
 		}
 	case "POST":
-		clientID := r.FormValue("client_id")
-		redirectURI := r.FormValue("redirect_uri")
-		responseType := r.FormValue("response_type")
-		scope := r.FormValue("scope")
-		state := r.FormValue("state")
+		clientID := c.PostForm("client_id")
+		redirectURI := c.PostForm("redirect_uri")
+		responseType := c.PostForm("response_type")
+		scope := c.PostForm("scope")
+		state := c.PostForm("state")
 
 		logger.Tracef("/authorize POST clientID: %s, redirectURI: %s, responseType: %s, scope: %s, state: %s", clientID, redirectURI, responseType, scope, state)
 
 		// Validate state with client info
 		if !h.stateStore.ValidateWithClientInfo(state, clientID, redirectURI) {
-			http.Error(w, "Invalid state or mismatched client information", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid state or mismatched client information"})
 			return
 		}
 
-		if err := h.srv.HandleAuthorizeRequest(w, r); err != nil {
-			log.Printf("Authorization error: %v", err)
+		if err := h.srv.HandleAuthorizeRequest(c.Writer, c.Request); err != nil {
+			logger.Errorf("Authorization error: %v", err)
 		}
 	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
 	}
 }

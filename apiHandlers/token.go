@@ -3,6 +3,7 @@ package apiHandlers
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/go-oauth2/oauth2/v4/server"
 	"github.com/kdjuwidja/aishoppercommon/logger"
 	"netherealmstudio.com/m/v2/statestore"
@@ -20,30 +21,30 @@ func InitializeTokenHandler(srv *server.Server, stateStore *statestore.StateStor
 	}
 }
 
-func (h *TokenHandler) Handle(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+func (h *TokenHandler) Handle(c *gin.Context) {
+	if c.Request.Method != "POST" {
+		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+	if err := c.Request.ParseForm(); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse form"})
 		return
 	}
 
-	code := r.PostFormValue("code")
-	state := r.PostFormValue("state")
-	redirectURI := r.PostFormValue("redirect_uri")
-	clientID := r.PostFormValue("client_id")
+	code := c.PostForm("code")
+	state := c.PostForm("state")
+	redirectURI := c.PostForm("redirect_uri")
+	clientID := c.PostForm("client_id")
 
-	logger.Tracef("/token POST code: %s, state: %s, redirectURI: %s, grant_type: %s, clientID: %s", code, state, redirectURI, r.PostFormValue("grant_type"), clientID)
+	logger.Tracef("/token POST code: %s, state: %s, redirectURI: %s, grant_type: %s, clientID: %s", code, state, redirectURI, c.PostForm("grant_type"), clientID)
 
 	if !h.stateStore.ValidateWithClientInfo(state, clientID, redirectURI) {
-		http.Error(w, "Invalid state or mismatched redirectURI", http.StatusBadRequest)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid state or mismatched redirectURI"})
 		return
 	}
 
-	err := h.srv.HandleTokenRequest(w, r)
+	err := h.srv.HandleTokenRequest(c.Writer, c.Request)
 	if err == nil {
 		h.stateStore.DeleteState(state)
 	}
