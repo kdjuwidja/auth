@@ -27,7 +27,7 @@ func TestJWTTokenStore(t *testing.T) {
 	refreshTTL := 86400
 
 	ctx := context.Background()
-	store, err := InitializeJWTTokenStore(redisClient, "../lua/create.lua", codeTTL, accessTTL, refreshTTL)
+	store, err := InitializeJWTTokenStore(redisClient, "../lua/create.lua")
 	assert.NoError(t, err)
 
 	// Clean up Redis after tests
@@ -42,13 +42,16 @@ func TestJWTTokenStore(t *testing.T) {
 	t.Run("Create and Get Token", func(t *testing.T) {
 		// Create test token
 		token := &models.Token{
-			ClientID:        "test_client",
-			UserID:          "test_user",
-			Access:          "test_access_token",
-			Refresh:         "test_refresh_token",
-			Code:            "test_code",
-			AccessCreateAt:  time.Now(),
-			RefreshCreateAt: time.Now(),
+			ClientID:         "test_client",
+			UserID:           "test_user",
+			Access:           "test_access_token",
+			Refresh:          "test_refresh_token",
+			Code:             "test_code",
+			AccessExpiresIn:  time.Duration(accessTTL) * time.Second,
+			RefreshExpiresIn: time.Duration(refreshTTL) * time.Second,
+			CodeExpiresIn:    time.Duration(codeTTL) * time.Second,
+			AccessCreateAt:   time.Now().Add(time.Duration(accessTTL) * time.Second),
+			RefreshCreateAt:  time.Now().Add(time.Duration(refreshTTL) * time.Second),
 		}
 
 		// Create token

@@ -20,15 +20,11 @@ const (
 )
 
 type JWTTokenStore struct {
-	redisClient     *redis.Client
-	codeTTL         int
-	accessTokenTTL  int
-	refreshTokenTTL int
-
-	script string
+	redisClient *redis.Client
+	script      string
 }
 
-func InitializeJWTTokenStore(redisClient *redis.Client, luaScriptPath string, codeTTL int, accessTTL int, refreshTTL int) (oauth2.TokenStore, error) {
+func InitializeJWTTokenStore(redisClient *redis.Client, luaScriptPath string) (oauth2.TokenStore, error) {
 	// preload the text version of the script, awaiting to be loaded into redis when needed.
 	script, err := os.ReadFile(luaScriptPath)
 	if err != nil {
@@ -36,11 +32,8 @@ func InitializeJWTTokenStore(redisClient *redis.Client, luaScriptPath string, co
 	}
 
 	return &JWTTokenStore{
-		redisClient:     redisClient,
-		codeTTL:         codeTTL,
-		accessTokenTTL:  accessTTL,
-		refreshTokenTTL: refreshTTL,
-		script:          string(script),
+		redisClient: redisClient,
+		script:      string(script),
 	}, nil
 }
 
@@ -102,9 +95,9 @@ func (jwtts *JWTTokenStore) Create(ctx context.Context, info oauth2.TokenInfo) e
 		info.GetCode(),
 		info.GetAccess(),
 		info.GetRefresh(),
-		fmt.Sprintf("%d", jwtts.codeTTL),
-		fmt.Sprintf("%d", jwtts.accessTokenTTL),
-		fmt.Sprintf("%d", jwtts.refreshTokenTTL),
+		fmt.Sprintf("%.0f", info.GetCodeExpiresIn().Seconds()),
+		fmt.Sprintf("%.0f", info.GetAccessExpiresIn().Seconds()),
+		fmt.Sprintf("%.0f", info.GetRefreshExpiresIn().Seconds()),
 		string(jv))
 	if err != nil {
 		return err

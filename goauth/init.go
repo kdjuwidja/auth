@@ -2,6 +2,7 @@ package goauth
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/go-oauth2/oauth2/v4/manage"
 	oauthmodels "github.com/go-oauth2/oauth2/v4/models"
@@ -53,12 +54,18 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 	refreshTTL := osutil.GetEnvInt("REFRESH_TTL", 86400)
 
 	//token memory store
-	goAuth.manager.MustTokenStorage(InitializeJWTTokenStore(redisClient, "./lua/create.lua", codeTTL, accessTTL, refreshTTL))
+	goAuth.manager.MustTokenStorage(InitializeJWTTokenStore(redisClient, "./lua/create.lua"))
 
 	// Configure JWT token generation with custom claims
 	jwtSecret := osutil.GetEnvString("JWT_SECRET", "your-secret-key")
 	accessGen := token.NewJWTTokenGenerator("jwt-key", []byte(jwtSecret))
 	goAuth.manager.MapAccessGenerate(accessGen)
+	goAuth.manager.SetAuthorizeCodeExp(time.Duration(codeTTL) * time.Second)
+	goAuth.manager.SetAuthorizeCodeTokenCfg(&manage.Config{
+		AccessTokenExp:    time.Duration(accessTTL) * time.Second,
+		RefreshTokenExp:   time.Duration(refreshTTL) * time.Second,
+		IsGenerateRefresh: true,
+	})
 
 	// Initialize API client store
 	clientStore, err := initializeAPIClientStore(dbConn, isLocalDev)
