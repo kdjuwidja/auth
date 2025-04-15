@@ -17,7 +17,7 @@ func TestJWTTokenStore(t *testing.T) {
 	logger.SetServiceName("test")
 
 	redisClient := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     "localhost:7379",
 		Password: "testpassword",
 		Username: "default",
 	})
