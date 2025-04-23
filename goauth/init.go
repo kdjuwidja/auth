@@ -12,6 +12,7 @@ import (
 	"github.com/kdjuwidja/aishoppercommon/osutil"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
+	"netherealmstudio.com/m/v2/biz"
 	dbmodel "netherealmstudio.com/m/v2/db"
 	"netherealmstudio.com/m/v2/statestore"
 	"netherealmstudio.com/m/v2/token"
@@ -53,12 +54,19 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 	accessTTL := osutil.GetEnvInt("ACCESS_TTL", 3600)
 	refreshTTL := osutil.GetEnvInt("REFRESH_TTL", 86400)
 
+	// Initialize API client store
+	goAuthClientStore, apiClientStore, err := initializeAPIClientStore(dbConn, isLocalDev)
+	if err != nil {
+		return nil, err
+	}
+	goAuth.manager.MapClientStorage(goAuthClientStore)
+
 	//token memory store
 	goAuth.manager.MustTokenStorage(InitializeJWTTokenStore(redisClient, "./lua/create.lua"))
 
 	// Configure JWT token generation with custom claims
 	jwtSecret := osutil.GetEnvString("JWT_SECRET", "your-secret-key")
-	accessGen := token.NewJWTTokenGenerator("jwt-key", []byte(jwtSecret))
+	accessGen := token.NewJWTTokenGenerator("jwt-key", []byte(jwtSecret), apiClientStore)
 	goAuth.manager.MapAccessGenerate(accessGen)
 	goAuth.manager.SetAuthorizeCodeExp(time.Duration(codeTTL) * time.Second)
 	goAuth.manager.SetAuthorizeCodeTokenCfg(&manage.Config{
@@ -66,13 +74,6 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 		RefreshTokenExp:   time.Duration(refreshTTL) * time.Second,
 		IsGenerateRefresh: true,
 	})
-
-	// Initialize API client store
-	clientStore, err := initializeAPIClientStore(dbConn, isLocalDev)
-	if err != nil {
-		return nil, err
-	}
-	goAuth.manager.MapClientStorage(clientStore)
 
 	goAuth.srv = server.NewDefaultServer(goAuth.manager)
 	goAuth.srv.SetAllowGetAccessRequest(true)
@@ -126,54 +127,18 @@ func createLocalDevUser(dbConn *gorm.DB) error {
 	return nil
 }
 
-func initializeAPIClientStore(dbConn *gorm.DB, isLocalDev bool) (*store.ClientStore, error) {
-	clientStore := store.NewClientStore()
+func initializeAPIClientStore(dbConn *gorm.DB, isLocalDev bool) (*store.ClientStore, *biz.APIClientStore, error) {
+	apiClientStore := biz.NewAPIClientStore(dbConn, isLocalDev)
 
-	result := dbConn.Find(&dbmodel.APIClient{})
-	if result.Error != nil {
-		return nil, fmt.Errorf("error loading clients: %v", result.Error)
+	goauthClientStore := store.NewClientStore()
+	goauthClients := apiClientStore.GetAPIClients()
+	for _, client := range goauthClients {
+		goauthClientStore.Set(client.ID, &oauthmodels.Client{
+			ID:     client.ID,
+			Secret: client.Secret,
+			Domain: client.Domain,
+		})
 	}
 
-	if result.RowsAffected == 0 {
-		if isLocalDev {
-			//create default local dev client
-			defaultClientId := osutil.GetEnvString("DEFAULT_CLIENT_ID", "82ce1a881b304775ad288e57e41387f3")
-			defaultClientSecret := osutil.GetEnvString("DEFAULT_CLIENT_SECRET", "my_secret")
-			defaultClientDomain := osutil.GetEnvString("DEFAULT_CLIENT_DOMAIN", "http://localhost:3000")
-			defaultIsPublic := osutil.GetEnvString("DEFAULT_IS_PUBLIC", "1")
-			defaultDescription := osutil.GetEnvString("DEFAULT_DESCRIPTION", "Default client for ai_shopper_depot")
-
-			client := dbmodel.APIClient{
-				ID:          defaultClientId,
-				Secret:      defaultClientSecret,
-				Domain:      defaultClientDomain,
-				IsPublic:    defaultIsPublic == "1",
-				Description: defaultDescription,
-			}
-			dbConn.Create(&client)
-
-			clientStore.Set(client.ID, &oauthmodels.Client{
-				ID:     client.ID,
-				Secret: client.Secret,
-				Domain: client.Domain,
-			})
-		} else {
-			return nil, fmt.Errorf("no clients found")
-		}
-	} else {
-		// Retrieve all clients from db and set to client store
-		var clients []dbmodel.APIClient
-		result.Scan(&clients)
-		for _, client := range clients {
-			clientStore.Set(client.ID, &oauthmodels.Client{
-				ID:     client.ID,
-				Secret: client.Secret,
-				Domain: client.Domain,
-			})
-
-			logger.Tracef("Client: %s, %s, %s", client.ID, client.Secret, client.Domain)
-		}
-	}
-
-	return clientStore, nil
+	return goauthClientStore, apiClientStore, nil
 }

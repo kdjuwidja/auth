@@ -18,3 +18,11 @@ type User struct {
 	Password string `json:"password" gorm:"type:varchar(255);not null"`
 	IsActive bool   `json:"is_active" gorm:"type:tinyint(1);not null;default:1"`
 }
+
+type APIClientScope struct {
+	gorm.Model
+	ID          uint      `json:"id" gorm:"primaryKey;autoIncrement"`
+	APIClientID string    `json:"api_client_id" gorm:"type:varchar(45);not null;foreignKey:ID;references:APIClient"`
+	Scope       string    `json:"scope" gorm:"type:varchar(255);not null"`
+	APIClient   APIClient `json:"api_client" gorm:"foreignKey:APIClientID"`
+}
