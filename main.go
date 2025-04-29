@@ -52,6 +52,9 @@ func main() {
 
 	// Initialize Gin router
 	router := gin.Default()
+	trustProxiesConf := osutil.GetEnvString("TRUST_PROXIES", "127.0.0.1")
+	trustProxies := strings.Split(trustProxiesConf, ",")
+	router.SetTrustedProxies(trustProxies)
 
 	// CORS middleware
 	router.Use(func(c *gin.Context) {
