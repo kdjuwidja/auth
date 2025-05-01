@@ -80,10 +80,12 @@ func main() {
 	router.Static("/static", "./web/static")
 
 	// Initialize handlers
+	healthHandler := apiHandlers.InitializeHealthHandler()
 	authorizeHandler := apiHandlers.InitializeAuthorizeHandler(goAuth.GetSrv(), tmpl, goAuth.GetStateStore())
 	tokenHandler := apiHandlers.InitializeTokenHandler(goAuth.GetSrv(), goAuth.GetStateStore())
 
 	// Register routes
+	router.GET("/health", healthHandler.HealthCheck)
 	router.GET("/authorize", authorizeHandler.Handle)
 	router.POST("/authorize", authorizeHandler.Handle)
 	router.POST("/token", tokenHandler.Handle)
