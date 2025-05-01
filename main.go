@@ -84,12 +84,18 @@ func main() {
 	authorizeHandler := apiHandlers.InitializeAuthorizeHandler(goAuth.GetSrv(), tmpl, goAuth.GetStateStore())
 	tokenHandler := apiHandlers.InitializeTokenHandler(goAuth.GetSrv(), goAuth.GetStateStore())
 
+	serviceName := osutil.GetEnvString("SERVICE_NAME", "auth")
+
 	// Register routes
-	router.GET("/health", healthHandler.HealthCheck)
-	router.GET("/authorize", authorizeHandler.Handle)
-	router.POST("/authorize", authorizeHandler.Handle)
-	router.POST("/token", tokenHandler.Handle)
+	router.GET(getRoute(serviceName, "/health"), healthHandler.HealthCheck)
+	router.GET(getRoute(serviceName, "/authorize"), authorizeHandler.Handle)
+	router.POST(getRoute(serviceName, "/authorize"), authorizeHandler.Handle)
+	router.POST(getRoute(serviceName, "/token"), tokenHandler.Handle)
 
 	// Start server
 	log.Fatal(router.Run(":9096"))
+}
+
+func getRoute(servinceName string, route string) string {
+	return "/" + servinceName + route
 }
