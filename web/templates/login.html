@@ -3,7 +3,7 @@
 <head>
     <title>Login</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="/static/css/output.css" rel="stylesheet">
+    <link href="{{.BasePath}}/static/css/output.css" rel="stylesheet">
 </head>
 <body class="font-sans flex justify-center items-center min-h-screen m-0 bg-gray-100 p-4">
     <div class="bg-white p-4 sm:p-6 md:p-8 rounded-lg shadow-md w-full max-w-md mx-auto">
@@ -13,7 +13,7 @@
             {{.Error}}
         </div>
         {{end}}
-        <form method="POST" action="/authorize">
+        <form method="POST" action="{{.BasePath}}/authorize">
             <input type="hidden" name="client_id" value="{{.ClientID}}">
             <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
             <input type="hidden" name="state" value="{{.State}}">

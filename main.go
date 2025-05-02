@@ -77,14 +77,13 @@ func main() {
 	})
 
 	// Serve static files
-	router.Static("/static", "./web/static")
+	serviceName := osutil.GetEnvString("SERVICE_NAME", "auth")
+	router.Static("/"+serviceName+"/static", "./web/static")
 
 	// Initialize handlers
 	healthHandler := apiHandlers.InitializeHealthHandler()
 	authorizeHandler := apiHandlers.InitializeAuthorizeHandler(goAuth.GetSrv(), tmpl, goAuth.GetStateStore())
 	tokenHandler := apiHandlers.InitializeTokenHandler(goAuth.GetSrv(), goAuth.GetStateStore())
-
-	serviceName := osutil.GetEnvString("SERVICE_NAME", "auth")
 
 	// Register routes
 	router.GET(getRoute(serviceName, "/health"), healthHandler.HealthCheck)

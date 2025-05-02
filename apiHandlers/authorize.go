@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-oauth2/oauth2/v4/server"
 	"github.com/kdjuwidja/aishoppercommon/logger"
+	"github.com/kdjuwidja/aishoppercommon/osutil"
 	"netherealmstudio.com/m/v2/statestore"
 )
 
@@ -46,6 +47,9 @@ func (h *AuthorizeHandler) Handle(c *gin.Context) {
 		// Store the client's state
 		h.stateStore.Add(state, clientID, redirectURI)
 
+		// Get service name from environment variable
+		serviceName := osutil.GetEnvString("SERVICE_NAME", "auth")
+
 		// Render template with parameters
 		data := struct {
 			ClientID     string
@@ -54,6 +58,7 @@ func (h *AuthorizeHandler) Handle(c *gin.Context) {
 			ResponseType string
 			Scope        string
 			Error        string
+			BasePath     string
 		}{
 			ClientID:     clientID,
 			RedirectURI:  redirectURI,
@@ -61,6 +66,7 @@ func (h *AuthorizeHandler) Handle(c *gin.Context) {
 			ResponseType: responseType,
 			Scope:        scope,
 			Error:        c.Query("error"),
+			BasePath:     "/" + serviceName,
 		}
 
 		if err := h.tmpl.Execute(c.Writer, data); err != nil {
