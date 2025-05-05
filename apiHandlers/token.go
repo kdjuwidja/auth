@@ -23,11 +23,13 @@ func InitializeTokenHandler(srv *server.Server, stateStore *statestore.StateStor
 
 func (h *TokenHandler) Handle(c *gin.Context) {
 	if c.Request.Method != "POST" {
+		logger.Tracef("/token POST Method not allowed")
 		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "Method not allowed"})
 		return
 	}
 
 	if err := c.Request.ParseForm(); err != nil {
+		logger.Tracef("/token POST Failed to parse form: %s", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse form"})
 		return
 	}
@@ -40,6 +42,7 @@ func (h *TokenHandler) Handle(c *gin.Context) {
 	logger.Tracef("/token POST code: %s, state: %s, redirectURI: %s, grant_type: %s, clientID: %s", code, state, redirectURI, c.PostForm("grant_type"), clientID)
 
 	if !h.stateStore.ValidateWithClientInfo(state, clientID, redirectURI) {
+		logger.Tracef("/token POST Invalid state or mismatched redirectURI")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid state or mismatched redirectURI"})
 		return
 	}
