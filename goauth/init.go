@@ -2,6 +2,7 @@ package goauth
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-oauth2/oauth2/v4/manage"
@@ -105,23 +106,28 @@ func createLocalDevUser(dbConn *gorm.DB) error {
 	}
 
 	if count == 0 {
-		user1 := dbmodel.User{
-			ID:       "eb5dc850f1fb40a8b9b2bffd89c6a32d",
-			Email:    "kdjuwidja@netherrealmstudio.com",
-			Password: "$2a$10$vZU8LUTitjbU.FrFHIVkkuF7Gb6SrF3Zz0Eqq5coet/MuYEzRQ2Qm",
-			IsActive: true,
-		}
-		user2 := dbmodel.User{
-			ID:       "73064f370eda46a48a86e1fd8118be4c",
-			Email:    "timmyk@netherrealmstudio.com",
-			Password: "$2a$10$s5jg5gL1/2tWDOX5JcgWk.wqZR8kTxb46X3thb8JIsaD6HVYtpKGG",
-			IsActive: true,
-		}
-		if err := dbConn.Create(&user1).Error; err != nil {
-			return fmt.Errorf("failed to create user1: %v", err)
-		}
-		if err := dbConn.Create(&user2).Error; err != nil {
-			return fmt.Errorf("failed to create user2: %v", err)
+		userIds := osutil.GetEnvString("DEFAULT_USER_IDS", "")
+		userEmails := osutil.GetEnvString("DEFAULT_USER_EMAILS", "")
+		passwords := osutil.GetEnvString("DEFAULT_PASSWORDS", "")
+
+		userIdsList := strings.Split(userIds, ",")
+		userEmailsList := strings.Split(userEmails, ",")
+		passwordsList := strings.Split(passwords, ",")
+
+		for i, userId := range userIdsList {
+			userEmail := userEmailsList[i]
+			password := passwordsList[i]
+
+			user := dbmodel.User{
+				ID:       userId,
+				Email:    userEmail,
+				Password: password,
+				IsActive: true,
+			}
+
+			if err := dbConn.Create(&user).Error; err != nil {
+				return fmt.Errorf("failed to create user: %v", err)
+			}
 		}
 	}
 	return nil
