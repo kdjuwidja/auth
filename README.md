@@ -1,4 +1,4 @@
-# Auth Service for AI Shopper
+# Auth Service for shopper app
 
 This service provides authentication and authorization functionality for the AI Shopper application using OAuth2.
 
@@ -8,32 +8,7 @@ The auth service implements OAuth2 authentication using the go-oauth2 library. I
 
 - Authorization code flow
 - JWT-based access tokens
-- Redis-backed token storage
-
-## Architecture
-
-The service consists of:
-
-- **OAuth2 Server**: Handles authentication and authorization flows
-- **Token Storage**: Redis-based storage for tokens with Lua scripts for atomic operations
-- **User Management**: User authentication and management
-- **Client Management**: OAuth client registration and management
-- **Login page**: Powered by tailwind css
-
-## Configuration
-
-The service can be configured using environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| REDIS_HOST | Redis host | localhost |
-| REDIS_PORT | Redis port | 6379 |
-| REDIS_USER | Redis username | default |
-| REDIS_PASSWORD | Redis password | password |
-| JWT_SECRET | Secret for JWT signing | your-secret-key |
-| CODE_TTL | Authorization code TTL in seconds | 300 |
-| ACCESS_TTL | Access token TTL in seconds | 3600 |
-| REFRESH_TTL | Refresh token TTL in seconds | 86400 |
+- Redis-backed token storage with configurable limit on the number of issued tokens
 
 ## Development
 
@@ -44,6 +19,7 @@ The service can be configured using environment variables:
 - MySQL 8.0+
 
 ### Running Locally
+You can obtain the docker compose files from [ai_shopper_docker_compose](https://github.com/kdjuwidja/ai_shopper_docker_compose)
 
 1. Start Redis and MySQL using Docker Compose:
    ```
@@ -75,8 +51,8 @@ docker-compose -f docker-compose-test.yml up -d
 ### Token Storage
 
 Tokens are stored in Redis with the following structure:
-- `code:{userID}:{code}` - Authorization codes
-- `access:{userID}:{access}` - Access tokens
-- `refresh:{userID}:{refresh}` - Refresh tokens
+- `code:{userID}:{code}` - Authorization codes (5 minutes TTL)
+- `access:{userID}:{access}` - Access tokens (1 hour TTL)
+- `refresh:{userID}:{refresh}` - Refresh tokens (24 hours TTL)
 
-Lua scripts are used to ensure atomic operations when creating and managing tokens. Lua SHA is stored in REDIS with the key `SHA:createScript`.
+Lua scripe is used to ensure atomic operations when creating and managing tokens to enforce configurable limit on tokens per user. See `./lua/create.lua` for implementation details.
