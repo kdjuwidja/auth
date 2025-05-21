@@ -38,7 +38,7 @@ func InitializeJWTTokenStore() (oauth2.TokenStore, error) {
 }
 
 func InitializeJWTTokenStoreWithKeyLimit(redisClient *redis.Client, luaScriptPath string, maxNumKeys int) (oauth2.TokenStore, error) {
-	logger.Info("Initializing JWTTokenStore with key limit = %d.", maxNumKeys)
+	logger.Infof("Initializing JWTTokenStore with key limit = %d.", maxNumKeys)
 	// preload the text version of the script, awaiting to be loaded into redis when needed.
 	script, err := os.ReadFile(luaScriptPath)
 	if err != nil {
