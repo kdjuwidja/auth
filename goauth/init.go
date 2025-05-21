@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-oauth2/oauth2/v4"
 	"github.com/go-oauth2/oauth2/v4/manage"
 	oauthmodels "github.com/go-oauth2/oauth2/v4/models"
 	"github.com/go-oauth2/oauth2/v4/server"
@@ -40,17 +41,6 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 	goAuth.statestore = statestore.NewStateStore()
 	goAuth.manager = manage.NewDefaultManager()
 
-	redisHost := osutil.GetEnvString("REDIS_HOST", "localhost")
-	redisPort := osutil.GetEnvString("REDIS_PORT", "6379")
-	redisUser := osutil.GetEnvString("REDIS_USER", "default")
-	redisPassword := osutil.GetEnvString("REDIS_PASSWORD", "password")
-
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
-		Password: redisPassword,
-		Username: redisUser,
-	})
-
 	codeTTL := osutil.GetEnvInt("CODE_TTL", 300)
 	accessTTL := osutil.GetEnvInt("ACCESS_TTL", 3600)
 	refreshTTL := osutil.GetEnvInt("REFRESH_TTL", 86400)
@@ -63,7 +53,25 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 	goAuth.manager.MapClientStorage(goAuthClientStore)
 
 	//token memory store
-	goAuth.manager.MustTokenStorage(InitializeJWTTokenStore(redisClient, "./lua/create.lua"))
+
+	var jwtTokenStore oauth2.TokenStore
+	hasKeyLimit := osutil.GetEnvBool("RESTRICT_NUM_KEYS", false)
+	if hasKeyLimit {
+		redisHost := osutil.GetEnvString("REDIS_HOST", "localhost")
+		redisPort := osutil.GetEnvString("REDIS_PORT", "6379")
+		redisUser := osutil.GetEnvString("REDIS_USER", "default")
+		redisPassword := osutil.GetEnvString("REDIS_PASSWORD", "password")
+
+		redisClient := redis.NewClient(&redis.Options{
+			Addr:     fmt.Sprintf("%s:%s", redisHost, redisPort),
+			Password: redisPassword,
+			Username: redisUser,
+		})
+		jwtTokenStore, err = InitializeJWTTokenStoreWithKeyLimit(redisClient, "./lua/create.lua", osutil.GetEnvInt("MAX_NUM_KEYS", 5))
+	} else {
+		jwtTokenStore, err = InitializeJWTTokenStore()
+	}
+	goAuth.manager.MustTokenStorage(jwtTokenStore, err)
 
 	// Configure JWT token generation with custom claims
 	jwtSecret := osutil.GetEnvString("JWT_SECRET", "your-secret-key")

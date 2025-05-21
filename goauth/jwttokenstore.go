@@ -11,7 +11,6 @@ import (
 	"github.com/go-oauth2/oauth2/v4/errors"
 	"github.com/go-oauth2/oauth2/v4/models"
 	"github.com/kdjuwidja/aishoppercommon/logger"
-	"github.com/kdjuwidja/aishoppercommon/osutil"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -21,10 +20,25 @@ const (
 
 type JWTTokenStore struct {
 	redisClient *redis.Client
+	keyCache    map[string]string
 	script      string
+	hasKeyLimit bool
+	maxNumKeys  int
 }
 
-func InitializeJWTTokenStore(redisClient *redis.Client, luaScriptPath string) (oauth2.TokenStore, error) {
+func InitializeJWTTokenStore() (oauth2.TokenStore, error) {
+	logger.Info("Initializing JWTTokenStore without key limit.")
+	return &JWTTokenStore{
+		redisClient: nil,
+		keyCache:    make(map[string]string),
+		script:      "",
+		hasKeyLimit: false,
+		maxNumKeys:  0,
+	}, nil
+}
+
+func InitializeJWTTokenStoreWithKeyLimit(redisClient *redis.Client, luaScriptPath string, maxNumKeys int) (oauth2.TokenStore, error) {
+	logger.Info("Initializing JWTTokenStore with key limit = %d.", maxNumKeys)
 	// preload the text version of the script, awaiting to be loaded into redis when needed.
 	script, err := os.ReadFile(luaScriptPath)
 	if err != nil {
@@ -33,7 +47,10 @@ func InitializeJWTTokenStore(redisClient *redis.Client, luaScriptPath string) (o
 
 	return &JWTTokenStore{
 		redisClient: redisClient,
+		keyCache:    nil,
 		script:      string(script),
+		hasKeyLimit: true,
+		maxNumKeys:  maxNumKeys,
 	}, nil
 }
 
@@ -87,52 +104,70 @@ func (jwtts *JWTTokenStore) Create(ctx context.Context, info oauth2.TokenInfo) e
 		return err
 	}
 
-	maxNumKeys := osutil.GetEnvInt("MAX_NUM_KEYS", 5)
+	if jwtts.hasKeyLimit {
+		reply, err := jwtts.executiveScript(ctx, jwtts.script, []string{},
+			info.GetUserID(),
+			strconv.Itoa(jwtts.maxNumKeys),
+			info.GetCode(),
+			info.GetAccess(),
+			info.GetRefresh(),
+			fmt.Sprintf("%.0f", info.GetCodeExpiresIn().Seconds()),
+			fmt.Sprintf("%.0f", info.GetAccessExpiresIn().Seconds()),
+			fmt.Sprintf("%.0f", info.GetRefreshExpiresIn().Seconds()),
+			string(jv))
+		if err != nil {
+			return err
+		}
 
-	reply, err := jwtts.executiveScript(ctx, jwtts.script, []string{},
-		info.GetUserID(),
-		strconv.Itoa(maxNumKeys),
-		info.GetCode(),
-		info.GetAccess(),
-		info.GetRefresh(),
-		fmt.Sprintf("%.0f", info.GetCodeExpiresIn().Seconds()),
-		fmt.Sprintf("%.0f", info.GetAccessExpiresIn().Seconds()),
-		fmt.Sprintf("%.0f", info.GetRefreshExpiresIn().Seconds()),
-		string(jv))
-	if err != nil {
-		return err
-	}
-
-	if reply != "SUCCESS" {
-		return errors.New(reply)
+		if reply != "SUCCESS" {
+			return errors.New(reply)
+		}
+	} else {
+		jwtts.keyCache["code:"+info.GetCode()] = string(jv)
+		jwtts.keyCache["access:"+info.GetAccess()] = string(jv)
+		jwtts.keyCache["refresh:"+info.GetRefresh()] = string(jv)
 	}
 
 	return nil
 }
 
 func (jwtts *JWTTokenStore) getBySearchKeyMatching(ctx context.Context, prefix string, searchKey string) (oauth2.TokenInfo, error) {
-	keys, err := jwtts.redisClient.Keys(ctx, prefix+":*:"+searchKey).Result()
-	if err != nil {
-		return nil, err
-	}
+	if jwtts.hasKeyLimit {
+		keys, err := jwtts.redisClient.Keys(ctx, prefix+":*:"+searchKey).Result()
+		if err != nil {
+			return nil, err
+		}
 
-	if len(keys) == 0 {
-		return nil, errors.ErrInvalidAccessToken
-	}
+		if len(keys) == 0 {
+			return nil, errors.ErrInvalidAccessToken
+		}
 
-	//should only have exactly one key
-	key := keys[0]
-	data, err := jwtts.redisClient.Get(ctx, key).Result()
-	if err != nil {
-		return nil, err
-	}
+		//should only have exactly one key
+		key := keys[0]
+		data, err := jwtts.redisClient.Get(ctx, key).Result()
+		if err != nil {
+			return nil, err
+		}
 
-	var tokenInfo models.Token
-	if err := json.Unmarshal([]byte(data), &tokenInfo); err != nil {
-		return nil, err
-	}
+		var tokenInfo models.Token
+		if err := json.Unmarshal([]byte(data), &tokenInfo); err != nil {
+			return nil, err
+		}
 
-	return &tokenInfo, nil
+		return &tokenInfo, nil
+	} else {
+		key, ok := jwtts.keyCache[prefix+":"+searchKey]
+		if !ok {
+			return nil, errors.ErrInvalidAccessToken
+		}
+
+		var tokenInfo models.Token
+		if err := json.Unmarshal([]byte(key), &tokenInfo); err != nil {
+			return nil, err
+		}
+
+		return &tokenInfo, nil
+	}
 }
 
 func (jwtts *JWTTokenStore) GetByCode(ctx context.Context, code string) (oauth2.TokenInfo, error) {
@@ -149,18 +184,28 @@ func (jwtts *JWTTokenStore) GetByRefresh(ctx context.Context, refresh string) (o
 }
 
 func (jwtts *JWTTokenStore) removeBySearchKeyMatching(ctx context.Context, prefix string, searchKey string) error {
-	keys, err := jwtts.redisClient.Keys(ctx, prefix+":*:"+searchKey).Result()
-	if err != nil {
-		return err
-	}
+	if jwtts.hasKeyLimit {
+		keys, err := jwtts.redisClient.Keys(ctx, prefix+":*:"+searchKey).Result()
+		if err != nil {
+			return err
+		}
 
-	if len(keys) == 0 {
-		return errors.ErrInvalidAccessToken
-	}
+		if len(keys) == 0 {
+			return errors.ErrInvalidAccessToken
+		}
 
-	//should only have exactly one key
-	key := keys[0]
-	return jwtts.redisClient.Del(ctx, key).Err()
+		//should only have exactly one key
+		key := keys[0]
+		return jwtts.redisClient.Del(ctx, key).Err()
+	} else {
+		_, ok := jwtts.keyCache[prefix+":"+searchKey]
+		if !ok {
+			return errors.ErrInvalidAccessToken
+		}
+
+		delete(jwtts.keyCache, prefix+":"+searchKey)
+		return nil
+	}
 }
 
 func (jwtts *JWTTokenStore) RemoveByCode(ctx context.Context, code string) error {
