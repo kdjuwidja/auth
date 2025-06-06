@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	isLocalDev := osutil.GetEnvString("IS_LOCAL_DEV", "false") == "true"
+	isLocalDev := osutil.GetEnvString("IS_LOCAL_DEV", "true") == "true"
 
 	models := []interface{}{
 		&dbmodel.APIClient{},

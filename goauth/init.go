@@ -2,7 +2,6 @@ package goauth
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/go-oauth2/oauth2/v4"
@@ -17,6 +16,7 @@ import (
 	bizapiclient "netherealmstudio.com/m/v2/biz/apiclient"
 	bizscope "netherealmstudio.com/m/v2/biz/scope"
 	dbmodel "netherealmstudio.com/m/v2/db"
+	"netherealmstudio.com/m/v2/defaults"
 	"netherealmstudio.com/m/v2/statestore"
 	"netherealmstudio.com/m/v2/token"
 )
@@ -91,6 +91,12 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 
 	//create default local dev user
 	if isLocalDev {
+		logger.Info("Creating local dev roles...")
+		if err := createLocalRoleRecords(dbConn); err != nil {
+			logger.Fatalf("Failed to create local dev roles: %v", err)
+		}
+
+		logger.Info("Creating local dev users...")
 		if err := createLocalDevUser(dbConn); err != nil {
 			logger.Fatalf("Failed to create local dev users: %v", err)
 		}
@@ -107,97 +113,105 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 	return goAuth, nil
 }
 
-func createLocalDevUser(dbConn *gorm.DB) error {
-	var count int64
-	result := dbConn.Find(&dbmodel.User{}).Count(&count)
-	if result.Error != nil {
-		return fmt.Errorf("failed to access user table: %v", result.Error)
+func createDBRoleRecords(dbConn *gorm.DB, roleId int, roleDescription string, roleScopes []string) error {
+	var role dbmodel.Role
+	result := dbConn.Where("description = ?", roleDescription).First(&role)
+	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+		return fmt.Errorf("error checking role: %v", result.Error)
 	}
 
-	if count == 0 {
-		userIds := osutil.GetEnvString("DEFAULT_USER_IDS", "")
-		userEmails := osutil.GetEnvString("DEFAULT_USER_EMAILS", "")
-		passwords := osutil.GetEnvString("DEFAULT_PASSWORDS", "")
-
-		userIdsList := strings.Split(userIds, ",")
-		userEmailsList := strings.Split(userEmails, ",")
-		passwordsList := strings.Split(passwords, ",")
-
-		for i, userId := range userIdsList {
-			userEmail := userEmailsList[i]
-			password := passwordsList[i]
-
-			user := dbmodel.User{
-				ID:       userId,
-				Email:    userEmail,
-				Password: password,
-				IsActive: true,
-			}
-
-			if err := dbConn.Create(&user).Error; err != nil {
-				return fmt.Errorf("failed to create user: %v", err)
-			}
+	if result.RowsAffected == 0 {
+		role = dbmodel.Role{
+			ID:          roleId,
+			Description: roleDescription,
+		}
+		if err := dbConn.Create(&role).Error; err != nil {
+			return fmt.Errorf("failed to create role: %v", err)
 		}
 	}
 
-	result = dbConn.Find(&dbmodel.Role{}).Count(&count)
-	if result.Error != nil {
-		return fmt.Errorf("failed to access role table: %v", result.Error)
-	}
+	for _, scope := range roleScopes {
+		var roleScope dbmodel.RoleScope
+		result = dbConn.Where("role_id = ? AND scope = ?", roleId, scope).First(&roleScope)
+		if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+			return fmt.Errorf("error checking role scope: %v", result.Error)
+		}
 
-	if count == 0 {
-		roles := []dbmodel.Role{
-			{ID: 1, Description: "admin"},
-			{ID: 2, Description: "regular users"},
-		}
-		for _, role := range roles {
-			if err := dbConn.Create(&role).Error; err != nil {
-				return fmt.Errorf("failed to create role: %v", err)
-			}
-		}
-		defaultRegularUserScopes := osutil.GetEnvString("DEFALUT_REGULAR_USER_SCOPES", "")
-		defaultAdminScopes := osutil.GetEnvString("DEFAULT_ADMIN_USER_SCOPES", "")
-		defaultRegularUserScopesList := strings.Split(defaultRegularUserScopes, ",")
-		defaultAdminScopesList := strings.Split(defaultAdminScopes, ",")
-		roleScopes := make([]dbmodel.RoleScope, 0)
-		for _, scope := range defaultAdminScopesList {
-			roleScopes = append(roleScopes, dbmodel.RoleScope{
-				RoleID: 1,
+		if result.RowsAffected == 0 {
+			roleScope = dbmodel.RoleScope{
+				RoleID: roleId,
 				Scope:  scope,
-			})
-		}
-		for _, scope := range defaultRegularUserScopesList {
-			roleScopes = append(roleScopes, dbmodel.RoleScope{
-				RoleID: 2,
-				Scope:  scope,
-			})
-		}
-		for _, roleScope := range roleScopes {
+			}
 			if err := dbConn.Create(&roleScope).Error; err != nil {
 				return fmt.Errorf("failed to create role scope: %v", err)
 			}
 		}
-		userIds := osutil.GetEnvString("DEFAULT_USER_IDS", "")
-		userIdsList := strings.Split(userIds, ",")
+	}
 
-		userRoles := make([]dbmodel.UserRole, 0)
-		for _, userId := range userIdsList {
-			regularUserRole := dbmodel.UserRole{
-				UserID: userId,
-				RoleID: 2,
-			}
-			userRoles = append(userRoles, regularUserRole)
-			adminRole := dbmodel.UserRole{
-				UserID: userId,
-				RoleID: 1,
-			}
-			userRoles = append(userRoles, adminRole)
+	return nil
+}
+
+func createLocalRoleRecords(dbConn *gorm.DB) error {
+	for _, role := range defaults.DEFAULT_ROLES {
+		err := createDBRoleRecords(dbConn, role["id"].(int), role["description"].(string), role["scopes"].([]string))
+		if err != nil {
+			return err
 		}
-		if err := dbConn.Create(&userRoles).Error; err != nil {
-			return fmt.Errorf("failed to create user roles: %v", err)
+	}
+	return nil
+}
+
+func createDBUserRecords(dbConn *gorm.DB, userID string, userEmail string, password string, userRoles []int) error {
+	var user dbmodel.User
+	result := dbConn.Where("id = ?", userID).First(&user)
+	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+		return fmt.Errorf("error checking user: %v", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		if userEmail == "" || password == "" {
+			return fmt.Errorf("user email or password is empty")
+		}
+
+		user = dbmodel.User{
+			ID:       userID,
+			Email:    userEmail,
+			Password: password,
+			IsActive: true,
+		}
+		if err := dbConn.Create(&user).Error; err != nil {
+			return fmt.Errorf("failed to create user: %v", err)
 		}
 	}
 
+	for _, roleId := range userRoles {
+		var userRole dbmodel.UserRole
+		result = dbConn.Where("user_id = ? AND role_id = ?", userID, roleId).First(&userRole)
+		if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+			return fmt.Errorf("error checking user role: %v", result.Error)
+		}
+
+		if result.RowsAffected == 0 {
+			userRole = dbmodel.UserRole{
+				UserID: userID,
+				RoleID: roleId,
+			}
+			if err := dbConn.Create(&userRole).Error; err != nil {
+				return fmt.Errorf("failed to create user role: %v", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func createLocalDevUser(dbConn *gorm.DB) error {
+	for _, user := range defaults.DEFAULT_USERS {
+		err := createDBUserRecords(dbConn, user["id"].(string), user["email"].(string), user["password"].(string), user["roles"].([]int))
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

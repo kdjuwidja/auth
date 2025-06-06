@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kdjuwidja/aishoppercommon/osutil"
+	"github.com/kdjuwidja/aishoppercommon/logger"
 	"gorm.io/gorm"
 	dbmodel "netherealmstudio.com/m/v2/db"
+	"netherealmstudio.com/m/v2/defaults"
 )
 
 type APIClient struct {
@@ -59,26 +60,54 @@ func (s *APIClientStore) GetClient(clientId string) (*APIClient, error) {
 }
 
 func createDefaultAPIClient(dbConn *gorm.DB) error {
-	apiClientResult := dbConn.Find(&dbmodel.APIClient{})
-	if apiClientResult.Error != nil {
-		return fmt.Errorf("error loading clients: %v", apiClientResult.Error)
+	for _, client := range defaults.DEFAULT_API_CLIENTS {
+		err := createDBRecords(dbConn,
+			client["id"].(string),
+			client["secret"].(string),
+			client["domain"].(string),
+			client["is_public"].(bool),
+			client["description"].(string),
+			client["scopes"].(string))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func createDBRecords(dbConn *gorm.DB, clientId string, clientSecret string, clientDomain string, clientIsPublic bool, clientDescription string, clientScopes string) error {
+	var client dbmodel.APIClient
+	result := dbConn.Where("id = ?", clientId).First(&client)
+	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+		return fmt.Errorf("error loading user client: %v", result.Error)
 	}
 
-	if apiClientResult.RowsAffected == 0 {
-		defaultClientId := osutil.GetEnvString("DEFAULT_CLIENT_ID", "82ce1a881b304775ad288e57e41387f3")
-		defaultClientSecret := osutil.GetEnvString("DEFAULT_CLIENT_SECRET", "my_secret")
-		defaultClientDomain := osutil.GetEnvString("DEFAULT_CLIENT_DOMAIN", "http://localhost:3000")
-		defaultIsPublic := osutil.GetEnvString("DEFAULT_IS_PUBLIC", "1")
-		defaultDescription := osutil.GetEnvString("DEFAULT_DESCRIPTION", "Default client for ai_shopper_depot")
-
-		client := dbmodel.APIClient{
-			ID:          defaultClientId,
-			Secret:      defaultClientSecret,
-			Domain:      defaultClientDomain,
-			IsPublic:    defaultIsPublic == "1",
-			Description: defaultDescription,
+	if result.RowsAffected == 0 {
+		client = dbmodel.APIClient{
+			ID:          clientId,
+			Secret:      clientSecret,
+			Domain:      clientDomain,
+			IsPublic:    clientIsPublic,
+			Description: clientDescription,
 		}
 		return dbConn.Create(&client).Error
+	}
+
+	scopes := strings.Split(clientScopes, " ")
+	for _, scope := range scopes {
+		var apiClientScope dbmodel.APIClientScope
+		result = dbConn.Where("api_client_id = ? AND scope = ?", clientId, scope).First(&apiClientScope)
+		if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+			return fmt.Errorf("error checking api client scope: %v", result.Error)
+		}
+
+		if result.RowsAffected == 0 {
+			apiClientScope = dbmodel.APIClientScope{
+				APIClientID: clientId,
+				Scope:       scope,
+			}
+			return dbConn.Create(&apiClientScope).Error
+		}
 	}
 
 	return nil
@@ -108,33 +137,6 @@ func loadAPIClient(dbConn *gorm.DB) (map[string]*APIClient, error) {
 	}
 
 	return apiClients, nil
-}
-
-// loadOrCreateDefaultAPIClientScope loads the default API client scope
-func createDefaultAPIClientScope(dbConn *gorm.DB) error {
-	apiClientScopeResult := dbConn.Find(&dbmodel.APIClientScope{})
-	if apiClientScopeResult.Error != nil {
-		return fmt.Errorf("error loading client scopes: %v", apiClientScopeResult.Error)
-	}
-
-	if apiClientScopeResult.RowsAffected == 0 {
-		defaultClientId := osutil.GetEnvString("DEFAULT_CLIENT_ID", "82ce1a881b304775ad288e57e41387f3")
-		scopes := osutil.GetEnvString("DEFAULT_CLIENT_SCOPE_SCOPE", "profile shoplist search")
-		scopeList := strings.Split(scopes, " ")
-		for _, scope := range scopeList {
-			err := dbConn.Create(&dbmodel.APIClientScope{
-				APIClientID: defaultClientId,
-				Scope:       scope,
-			}).Error
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
-	}
-
-	return nil
 }
 
 func loadAPIClientScope(dbConn *gorm.DB, apiClients map[string]*APIClient) error {
@@ -171,11 +173,8 @@ func loadAPIClientScope(dbConn *gorm.DB, apiClients map[string]*APIClient) error
 
 func (c *APIClientStore) initializeAPIClientStore() error {
 	if c.isLocalDev {
+		logger.Info("Creating default API clients...")
 		err := createDefaultAPIClient(c.dbConn)
-		if err != nil {
-			return err
-		}
-		err = createDefaultAPIClientScope(c.dbConn)
 		if err != nil {
 			return err
 		}
