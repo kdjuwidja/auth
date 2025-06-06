@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 	bizapiclient "netherealmstudio.com/m/v2/biz/apiclient"
+	bizscope "netherealmstudio.com/m/v2/biz/scope"
 	dbmodel "netherealmstudio.com/m/v2/db"
 	"netherealmstudio.com/m/v2/statestore"
 	"netherealmstudio.com/m/v2/token"
@@ -75,7 +76,7 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 
 	// Configure JWT token generation with custom claims
 	jwtSecret := osutil.GetEnvString("JWT_SECRET", "your-secret-key")
-	accessGen := token.NewJWTTokenGenerator("jwt-key", []byte(jwtSecret), apiClientStore)
+	accessGen := token.NewJWTTokenGenerator("jwt-key", []byte(jwtSecret), apiClientStore, bizscope.NewScopeAuthority(dbConn))
 	goAuth.manager.MapAccessGenerate(accessGen)
 	goAuth.manager.SetAuthorizeCodeExp(time.Duration(codeTTL) * time.Second)
 	goAuth.manager.SetAuthorizeCodeTokenCfg(&manage.Config{
@@ -138,6 +139,65 @@ func createLocalDevUser(dbConn *gorm.DB) error {
 			}
 		}
 	}
+
+	result = dbConn.Find(&dbmodel.Role{}).Count(&count)
+	if result.Error != nil {
+		return fmt.Errorf("failed to access role table: %v", result.Error)
+	}
+
+	if count == 0 {
+		roles := []dbmodel.Role{
+			{ID: 1, Description: "admin"},
+			{ID: 2, Description: "regular users"},
+		}
+		for _, role := range roles {
+			if err := dbConn.Create(&role).Error; err != nil {
+				return fmt.Errorf("failed to create role: %v", err)
+			}
+		}
+		defaultRegularUserScopes := osutil.GetEnvString("DEFALUT_REGULAR_USER_SCOPES", "")
+		defaultAdminScopes := osutil.GetEnvString("DEFAULT_ADMIN_USER_SCOPES", "")
+		defaultRegularUserScopesList := strings.Split(defaultRegularUserScopes, ",")
+		defaultAdminScopesList := strings.Split(defaultAdminScopes, ",")
+		roleScopes := make([]dbmodel.RoleScope, 0)
+		for _, scope := range defaultAdminScopesList {
+			roleScopes = append(roleScopes, dbmodel.RoleScope{
+				RoleID: 1,
+				Scope:  scope,
+			})
+		}
+		for _, scope := range defaultRegularUserScopesList {
+			roleScopes = append(roleScopes, dbmodel.RoleScope{
+				RoleID: 2,
+				Scope:  scope,
+			})
+		}
+		for _, roleScope := range roleScopes {
+			if err := dbConn.Create(&roleScope).Error; err != nil {
+				return fmt.Errorf("failed to create role scope: %v", err)
+			}
+		}
+		userIds := osutil.GetEnvString("DEFAULT_USER_IDS", "")
+		userIdsList := strings.Split(userIds, ",")
+
+		userRoles := make([]dbmodel.UserRole, 0)
+		for _, userId := range userIdsList {
+			regularUserRole := dbmodel.UserRole{
+				UserID: userId,
+				RoleID: 2,
+			}
+			userRoles = append(userRoles, regularUserRole)
+			adminRole := dbmodel.UserRole{
+				UserID: userId,
+				RoleID: 1,
+			}
+			userRoles = append(userRoles, adminRole)
+		}
+		if err := dbConn.Create(&userRoles).Error; err != nil {
+			return fmt.Errorf("failed to create user roles: %v", err)
+		}
+	}
+
 	return nil
 }
 

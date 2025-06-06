@@ -38,6 +38,7 @@ func (h *TokenHandler) Handle(c *gin.Context) {
 	state := c.PostForm("state")
 	redirectURI := c.PostForm("redirect_uri")
 	clientID := c.PostForm("client_id")
+	requestedScope := h.stateStore.GetRequestedScope(state)
 
 	logger.Tracef("/token POST code: %s, state: %s, redirectURI: %s, grant_type: %s, clientID: %s", code, state, redirectURI, c.PostForm("grant_type"), clientID)
 
@@ -47,6 +48,7 @@ func (h *TokenHandler) Handle(c *gin.Context) {
 		return
 	}
 
+	c.Request.Form.Set("requestedScope", requestedScope)
 	err := h.srv.HandleTokenRequest(c.Writer, c.Request)
 	if err == nil {
 		h.stateStore.DeleteState(state)

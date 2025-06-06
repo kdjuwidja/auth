@@ -21,6 +21,10 @@ func main() {
 		&dbmodel.APIClient{},
 		&dbmodel.User{},
 		&dbmodel.APIClientScope{},
+		&dbmodel.Role{},
+		&dbmodel.RoleScope{},
+		&dbmodel.UserRole{},
+		&dbmodel.RegistrationCode{},
 	}
 
 	mysqlConn, err := db.InitializeMySQLConnectionPool(osutil.GetEnvString("USER_DB_USER", "ai_shopper_dev"),

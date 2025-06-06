@@ -8,32 +8,31 @@ import (
 	"github.com/go-oauth2/oauth2/v4/generates"
 	"github.com/golang-jwt/jwt/v5"
 	bizapiclient "netherealmstudio.com/m/v2/biz/apiclient"
+	bizscope "netherealmstudio.com/m/v2/biz/scope"
 )
 
 // TokenGenerator handles JWT token generation
 type AccessTokenGenerator struct {
 	*generates.JWTAccessGenerate
 	apiClientStore *bizapiclient.APIClientStore
+	scopeAuthority *bizscope.ScopeAuthority
 }
 
 // NewAccessTokenGenerator creates a new token generator
-func NewJWTTokenGenerator(key string, secret []byte, apiClientStore *bizapiclient.APIClientStore) *AccessTokenGenerator {
+func NewJWTTokenGenerator(key string, secret []byte, apiClientStore *bizapiclient.APIClientStore, scopeAuthority *bizscope.ScopeAuthority) *AccessTokenGenerator {
 	return &AccessTokenGenerator{
 		JWTAccessGenerate: generates.NewJWTAccessGenerate(key, secret, jwt.SigningMethodHS256),
 		apiClientStore:    apiClientStore,
+		scopeAuthority:    scopeAuthority,
 	}
 }
 
 // Token generates a new JWT token
 func (g *AccessTokenGenerator) Token(ctx context.Context, data *oauth2.GenerateBasic, isGenRefresh bool) (string, string, error) {
-	// TODO: Get scope from the /authorize request and perform an intersection between the scope from the request and the scope from the api client
-	scope := data.Request.FormValue("scope")
-	if scope == "" {
-		s, err := g.apiClientStore.GetScope(data.Client.GetID())
-		if err != nil {
-			return "", "", err
-		}
-		scope = s
+	requestedScope := data.Request.Form.Get("requestedScope")
+	err := g.scopeAuthority.AuthorizeScope(ctx, data.Client.GetID(), data.UserID, requestedScope)
+	if err != nil {
+		return "", "", err
 	}
 
 	// Create claims
@@ -41,7 +40,7 @@ func (g *AccessTokenGenerator) Token(ctx context.Context, data *oauth2.GenerateB
 		"exp":   time.Now().Add(24 * time.Hour).Unix(),
 		"iat":   time.Now().Unix(),
 		"sub":   data.UserID,
-		"scope": scope,
+		"scope": requestedScope,
 	}
 
 	// Create token

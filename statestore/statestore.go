@@ -5,8 +5,9 @@ import (
 )
 
 type StateInfo struct {
-	ClientID    string
-	RedirectURI string
+	ClientID       string
+	RedirectURI    string
+	RequestedScope string
 }
 
 // StateStore manages OAuth2 state values
@@ -23,13 +24,20 @@ func NewStateStore() *StateStore {
 }
 
 // Add stores a new state with client info
-func (s *StateStore) Add(state, clientID, redirectURI string) {
+func (s *StateStore) Add(state, clientID, redirectURI, requestedScope string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.states[state] = StateInfo{
-		ClientID:    clientID,
-		RedirectURI: redirectURI,
+		ClientID:       clientID,
+		RedirectURI:    redirectURI,
+		RequestedScope: requestedScope,
 	}
+}
+
+func (s *StateStore) GetRequestedScope(state string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.states[state].RequestedScope
 }
 
 // ValidateState checks if a state exists without checking client info

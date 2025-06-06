@@ -32,12 +32,7 @@ func (h *AuthorizeHandler) Handle(c *gin.Context) {
 		redirectURI := c.Query("redirect_uri")
 		state := c.Query("state")
 		responseType := c.Query("response_type")
-		scope := func() string {
-			if s := c.Query("scope"); s != "" {
-				return s
-			}
-			return "profile"
-		}()
+		scope := c.Query("scope")
 
 		if clientID == "" || redirectURI == "" || state == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Missing client_id, redirect_uri, or state"})
@@ -45,7 +40,7 @@ func (h *AuthorizeHandler) Handle(c *gin.Context) {
 		}
 
 		// Store the client's state
-		h.stateStore.Add(state, clientID, redirectURI)
+		h.stateStore.Add(state, clientID, redirectURI, scope)
 
 		// Get service name from environment variable
 		serviceName := osutil.GetEnvString("SERVICE_NAME", "auth")

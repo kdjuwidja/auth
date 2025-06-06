@@ -40,7 +40,6 @@ func (h *GoAuthHandler) userAuthorizationHandler(w http.ResponseWriter, r *http.
 	password := r.PostFormValue("password")
 	logger.Tracef("email: %s, password: %s", email, password)
 
-	//TODO: request scope from client, then verify scope with db
 	userID, err = h.validateUser(email, password)
 	if err != nil {
 		return "", err
