@@ -14,7 +14,7 @@ import (
 	"github.com/kdjuwidja/aishoppercommon/osutil"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
-	"netherealmstudio.com/m/v2/biz"
+	bizapiclient "netherealmstudio.com/m/v2/biz/apiclient"
 	dbmodel "netherealmstudio.com/m/v2/db"
 	"netherealmstudio.com/m/v2/statestore"
 	"netherealmstudio.com/m/v2/token"
@@ -141,8 +141,8 @@ func createLocalDevUser(dbConn *gorm.DB) error {
 	return nil
 }
 
-func initializeAPIClientStore(dbConn *gorm.DB, isLocalDev bool) (*store.ClientStore, *biz.APIClientStore, error) {
-	apiClientStore := biz.NewAPIClientStore(dbConn, isLocalDev)
+func initializeAPIClientStore(dbConn *gorm.DB, isLocalDev bool) (*store.ClientStore, *bizapiclient.APIClientStore, error) {
+	apiClientStore := bizapiclient.NewAPIClientStore(dbConn, isLocalDev)
 
 	goauthClientStore := store.NewClientStore()
 	goauthClients := apiClientStore.GetAPIClients()

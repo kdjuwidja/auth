@@ -7,17 +7,17 @@ import (
 	"github.com/go-oauth2/oauth2/v4"
 	"github.com/go-oauth2/oauth2/v4/generates"
 	"github.com/golang-jwt/jwt/v5"
-	"netherealmstudio.com/m/v2/biz"
+	bizapiclient "netherealmstudio.com/m/v2/biz/apiclient"
 )
 
 // TokenGenerator handles JWT token generation
 type AccessTokenGenerator struct {
 	*generates.JWTAccessGenerate
-	apiClientStore *biz.APIClientStore
+	apiClientStore *bizapiclient.APIClientStore
 }
 
 // NewAccessTokenGenerator creates a new token generator
-func NewJWTTokenGenerator(key string, secret []byte, apiClientStore *biz.APIClientStore) *AccessTokenGenerator {
+func NewJWTTokenGenerator(key string, secret []byte, apiClientStore *bizapiclient.APIClientStore) *AccessTokenGenerator {
 	return &AccessTokenGenerator{
 		JWTAccessGenerate: generates.NewJWTAccessGenerate(key, secret, jwt.SigningMethodHS256),
 		apiClientStore:    apiClientStore,

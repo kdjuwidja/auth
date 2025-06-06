@@ -26,3 +26,8 @@ type APIClientScope struct {
 	Scope       string    `json:"scope" gorm:"type:varchar(255);not null"`
 	APIClient   APIClient `json:"api_client" gorm:"foreignKey:APIClientID"`
 }
+
+type RegistrationCode struct {
+	gorm.Model
+	Code string `json:"code" gorm:"type:varchar(6);primaryKey"`
+}
