@@ -1,4 +1,4 @@
-package apiHandlers
+package apiHandlersauth
 
 import (
 	"html/template"

@@ -10,6 +10,11 @@ import (
 	"github.com/kdjuwidja/aishoppercommon/logger"
 	"github.com/kdjuwidja/aishoppercommon/osutil"
 	"netherealmstudio.com/m/v2/apiHandlers"
+	apiHandlersaccount "netherealmstudio.com/m/v2/apiHandlers/account"
+	apiHandlersauth "netherealmstudio.com/m/v2/apiHandlers/auth"
+	apiHandlersdev "netherealmstudio.com/m/v2/apiHandlers/dev"
+	apiHandlershealth "netherealmstudio.com/m/v2/apiHandlers/health"
+	bizregister "netherealmstudio.com/m/v2/biz/register"
 	dbmodel "netherealmstudio.com/m/v2/db"
 	"netherealmstudio.com/m/v2/goauth"
 )
@@ -81,23 +86,32 @@ func main() {
 	})
 
 	// Serve static files
-	serviceName := osutil.GetEnvString("SERVICE_NAME", "auth")
-	router.Static("/"+serviceName+"/static", "./web/static")
+	authRouteName := osutil.GetEnvString("AUTH_ROUTE_NAME", "auth")
+	accoutRouteName := osutil.GetEnvString("ACC_ROUTE_NAME", "account")
+	router.Static("/"+authRouteName+"/static", "./web/static")
 
 	// Initialize handlers
-	healthHandler := apiHandlers.InitializeHealthHandler()
-	authorizeHandler := apiHandlers.InitializeAuthorizeHandler(goAuth.GetSrv(), tmpl, goAuth.GetStateStore())
-	tokenHandler := apiHandlers.InitializeTokenHandler(goAuth.GetSrv(), goAuth.GetStateStore())
+	healthHandler := apiHandlershealth.InitializeHealthHandler()
+	authorizeHandler := apiHandlersauth.InitializeAuthorizeHandler(goAuth.GetSrv(), tmpl, goAuth.GetStateStore())
+	tokenHandler := apiHandlersauth.InitializeTokenHandler(goAuth.GetSrv(), goAuth.GetStateStore())
+	responseFactory := apiHandlers.Initialize()
+	accountHandler := apiHandlersaccount.InitializeAccountHandler(bizregister.NewRegistrationManager(mysqlConn.GetDB(), 10), responseFactory)
 
-	// Register routes
-	router.GET(getRoute(serviceName, "/health"), healthHandler.HealthCheck)
-	router.GET(getRoute(serviceName, "/authorize"), authorizeHandler.Handle)
-	router.POST(getRoute(serviceName, "/authorize"), authorizeHandler.Handle)
-	router.POST(getRoute(serviceName, "/token"), tokenHandler.Handle)
+	tokenVerifier := apiHandlers.InitializeTokenVerifier(*responseFactory)
+
+	// Register routes for auth
+	router.GET(getRoute(authRouteName, "/health"), healthHandler.HealthCheck)
+	router.GET(getRoute(authRouteName, "/authorize"), authorizeHandler.Handle)
+	router.POST(getRoute(authRouteName, "/authorize"), authorizeHandler.Handle)
+	router.POST(getRoute(authRouteName, "/token"), tokenHandler.Handle)
 	if osutil.GetEnvString("IS_LOCAL_DEV", "false") == "true" {
-		tempHandler := apiHandlers.InitializeTempHandler()
-		router.GET(getRoute(serviceName, "/bcrypt"), tempHandler.GetBCryptHash)
+		tempHandler := apiHandlersdev.InitializeDevHandler()
+		router.GET(getRoute(authRouteName, "/bcrypt"), tempHandler.GetBCryptHash)
 	}
+
+	// Register routes for account
+	router.GET(getRoute(accoutRouteName, "/code"), tokenVerifier.VerifyToken([]string{"admin"}, accountHandler.GetRegistrationCode))
+	router.POST(getRoute(accoutRouteName, "/register"), accountHandler.RegisterAccount)
 
 	// Start server
 	log.Fatal(router.Run(":9096"))

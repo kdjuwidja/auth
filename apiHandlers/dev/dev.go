@@ -1,4 +1,4 @@
-package apiHandlers
+package apiHandlersdev
 
 import (
 	"net/http"
@@ -10,7 +10,7 @@ import (
 type DevHandler struct {
 }
 
-func InitializeTempHandler() *DevHandler {
+func InitializeDevHandler() *DevHandler {
 	return &DevHandler{}
 }
 

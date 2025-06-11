@@ -1,4 +1,4 @@
-package apiHandlers
+package apiHandlershealth
 
 import (
 	"net/http"
