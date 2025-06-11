@@ -94,6 +94,10 @@ func main() {
 	router.GET(getRoute(serviceName, "/authorize"), authorizeHandler.Handle)
 	router.POST(getRoute(serviceName, "/authorize"), authorizeHandler.Handle)
 	router.POST(getRoute(serviceName, "/token"), tokenHandler.Handle)
+	if osutil.GetEnvString("IS_LOCAL_DEV", "false") == "true" {
+		tempHandler := apiHandlers.InitializeTempHandler()
+		router.GET(getRoute(serviceName, "/bcrypt"), tempHandler.GetBCryptHash)
+	}
 
 	// Start server
 	log.Fatal(router.Run(":9096"))
