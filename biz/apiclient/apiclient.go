@@ -90,15 +90,18 @@ func createDBRecords(dbConn *gorm.DB, clientId string, clientSecret string, clie
 			IsPublic:    clientIsPublic,
 			Description: clientDescription,
 		}
-		return dbConn.Create(&client).Error
+		err := dbConn.Create(&client).Error
+		if err != nil {
+			return fmt.Errorf("error creating api client: %v", err)
+		}
 	}
 
 	scopes := strings.Split(clientScopes, " ")
 	for _, scope := range scopes {
 		var apiClientScope dbmodel.APIClientScope
-		result = dbConn.Where("api_client_id = ? AND scope = ?", clientId, scope).First(&apiClientScope)
+		result := dbConn.Where("api_client_id = ? AND scope = ?", clientId, scope).First(&apiClientScope)
 		if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
-			return fmt.Errorf("error checking api client scope: %v", result.Error)
+			return fmt.Errorf("error loading api client scope: %v", result.Error)
 		}
 
 		if result.RowsAffected == 0 {
@@ -106,7 +109,10 @@ func createDBRecords(dbConn *gorm.DB, clientId string, clientSecret string, clie
 				APIClientID: clientId,
 				Scope:       scope,
 			}
-			return dbConn.Create(&apiClientScope).Error
+			err := dbConn.Create(&apiClientScope).Error
+			if err != nil {
+				return fmt.Errorf("error creating api client scope: %v", err)
+			}
 		}
 	}
 
