@@ -4,20 +4,20 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-oauth2/oauth2/v4"
 	"github.com/go-oauth2/oauth2/v4/server"
 	"github.com/kdjuwidja/aishoppercommon/logger"
-	"netherealmstudio.com/m/v2/statestore"
 )
 
 type TokenHandler struct {
 	srv        *server.Server
-	stateStore *statestore.StateStore
+	tokenStore oauth2.TokenStore
 }
 
-func InitializeTokenHandler(srv *server.Server, stateStore *statestore.StateStore) *TokenHandler {
+func InitializeTokenHandler(srv *server.Server, tokenStore oauth2.TokenStore) *TokenHandler {
 	return &TokenHandler{
 		srv:        srv,
-		stateStore: stateStore,
+		tokenStore: tokenStore,
 	}
 }
 
@@ -35,22 +35,22 @@ func (h *TokenHandler) Handle(c *gin.Context) {
 	}
 
 	code := c.PostForm("code")
-	state := c.PostForm("state")
-	redirectURI := c.PostForm("redirect_uri")
-	clientID := c.PostForm("client_id")
-	requestedScope := h.stateStore.GetRequestedScope(state)
-
-	logger.Tracef("/token POST code: %s, state: %s, redirectURI: %s, grant_type: %s, clientID: %s", code, state, redirectURI, c.PostForm("grant_type"), clientID)
-
-	if !h.stateStore.ValidateWithClientInfo(state, clientID, redirectURI) {
-		logger.Tracef("/token POST Invalid state or mismatched redirectURI")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid state or mismatched redirectURI"})
+	token, err := h.tokenStore.GetByCode(c.Request.Context(), code)
+	if err != nil {
+		logger.Tracef("/token POST Failed to get token: %s", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid code"})
 		return
 	}
 
+	requestedScope := token.GetScope()
+
+	logger.Tracef("/token POST code: %s, requestedScope: %s, grant_type: %s", code, requestedScope, c.PostForm("grant_type"))
+
 	c.Request.Form.Set("requestedScope", requestedScope)
-	err := h.srv.HandleTokenRequest(c.Writer, c.Request)
-	if err == nil {
-		h.stateStore.DeleteState(state)
+	err = h.srv.HandleTokenRequest(c.Writer, c.Request)
+	if err != nil {
+		logger.Tracef("/token POST Failed to handle token request: %s", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to handle token request"})
+		return
 	}
 }

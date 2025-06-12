@@ -5,7 +5,7 @@ import "github.com/kdjuwidja/aishoppercommon/osutil"
 var DEFAULT_API_CLIENTS = []map[string]interface{}{
 	{
 		"id":          "82ce1a881b304775ad288e57e41387f3",
-		"secret":      "my_secret",
+		"secret":      "",
 		"domain":      "http://localhost:3000",
 		"is_public":   true,
 		"description": "Default client for ai_shopper_depot",
@@ -13,7 +13,7 @@ var DEFAULT_API_CLIENTS = []map[string]interface{}{
 	},
 	{
 		"id":          "de0125bfee1a486385819cdbb95ac675",
-		"secret":      "1ecc882ca7c24701bf7f201f366b5fe8",
+		"secret":      "",
 		"domain":      "http://localhost:3000",
 		"is_public":   true,
 		"description": "Default admin client for ai_shopper_depot",

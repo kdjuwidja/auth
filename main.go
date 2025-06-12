@@ -93,7 +93,7 @@ func main() {
 	// Initialize handlers
 	healthHandler := apiHandlershealth.InitializeHealthHandler()
 	authorizeHandler := apiHandlersauth.InitializeAuthorizeHandler(goAuth.GetSrv(), tmpl, goAuth.GetStateStore())
-	tokenHandler := apiHandlersauth.InitializeTokenHandler(goAuth.GetSrv(), goAuth.GetStateStore())
+	tokenHandler := apiHandlersauth.InitializeTokenHandler(goAuth.GetSrv(), goAuth.GetTokenStore())
 	responseFactory := apiHandlers.Initialize()
 	accountHandler := apiHandlersaccount.InitializeAccountHandler(bizregister.NewRegistrationManager(mysqlConn.GetDB(), 10), responseFactory)
 

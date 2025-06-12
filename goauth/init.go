@@ -24,6 +24,7 @@ import (
 type GoAuth struct {
 	srv        *server.Server
 	statestore *statestore.StateStore
+	tokenStore oauth2.TokenStore
 	manager    *manage.Manager
 }
 
@@ -33,6 +34,10 @@ func (g *GoAuth) GetSrv() *server.Server {
 
 func (g *GoAuth) GetStateStore() *statestore.StateStore {
 	return g.statestore
+}
+
+func (g *GoAuth) GetTokenStore() oauth2.TokenStore {
+	return g.tokenStore
 }
 
 func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
@@ -55,7 +60,6 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 
 	//token memory store
 
-	var jwtTokenStore oauth2.TokenStore
 	hasKeyLimit := osutil.GetEnvBool("RESTRICT_NUM_KEYS", false)
 	if hasKeyLimit {
 		redisHost := osutil.GetEnvString("REDIS_HOST", "localhost")
@@ -68,11 +72,11 @@ func InitializeGoAuth(dbConn *gorm.DB, isLocalDev bool) (*GoAuth, error) {
 			Password: redisPassword,
 			Username: redisUser,
 		})
-		jwtTokenStore, err = InitializeJWTTokenStoreWithKeyLimit(redisClient, "./lua/create.lua", osutil.GetEnvInt("MAX_NUM_KEYS", 5))
+		goAuth.tokenStore, err = InitializeJWTTokenStoreWithKeyLimit(redisClient, "./lua/create.lua", osutil.GetEnvInt("MAX_NUM_KEYS", 5))
 	} else {
-		jwtTokenStore, err = InitializeJWTTokenStore()
+		goAuth.tokenStore, err = InitializeJWTTokenStore()
 	}
-	goAuth.manager.MustTokenStorage(jwtTokenStore, err)
+	goAuth.manager.MustTokenStorage(goAuth.tokenStore, err)
 
 	// Configure JWT token generation with custom claims
 	jwtSecret := osutil.GetEnvString("JWT_SECRET", "your-secret-key")
