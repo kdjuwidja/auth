@@ -13,14 +13,16 @@ import (
 )
 
 type RegistrationManager struct {
-	maxRetry int
-	dbConn   *gorm.DB
+	maxRetry   int
+	dbConn     *gorm.DB
+	userRoleID int
 }
 
-func NewRegistrationManager(dbConn *gorm.DB, maxRetry int) *RegistrationManager {
+func NewRegistrationManager(dbConn *gorm.DB, maxRetry int, userRoleID int) *RegistrationManager {
 	return &RegistrationManager{
-		dbConn:   dbConn,
-		maxRetry: maxRetry,
+		dbConn:     dbConn,
+		maxRetry:   maxRetry,
+		userRoleID: userRoleID,
 	}
 }
 
@@ -82,6 +84,17 @@ func (r *RegistrationManager) RegisterUser(ctx context.Context, code string, ema
 	}
 
 	err = tx.Create(&user).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	userRole := db.UserRole{
+		UserID: user.ID,
+		RoleID: r.userRoleID,
+	}
+
+	err = tx.Create(&userRole).Error
 	if err != nil {
 		tx.Rollback()
 		return err

@@ -95,7 +95,7 @@ func main() {
 	authorizeHandler := apiHandlersauth.InitializeAuthorizeHandler(goAuth.GetSrv(), tmpl, goAuth.GetStateStore())
 	tokenHandler := apiHandlersauth.InitializeTokenHandler(goAuth.GetSrv(), goAuth.GetTokenStore())
 	responseFactory := apiHandlers.Initialize()
-	accountHandler := apiHandlersaccount.InitializeAccountHandler(bizregister.NewRegistrationManager(mysqlConn.GetDB(), 10), responseFactory)
+	accountHandler := apiHandlersaccount.InitializeAccountHandler(bizregister.NewRegistrationManager(mysqlConn.GetDB(), 10, osutil.GetEnvInt("USER_SCOPE_ID", 2)), responseFactory)
 
 	tokenVerifier := apiHandlers.InitializeTokenVerifier(*responseFactory)
 

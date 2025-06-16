@@ -23,12 +23,29 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 
 	// Drop tables if they exist
-	err = gormDB.Migrator().DropTable(&db.User{}, &db.RegistrationCode{})
+	err = gormDB.Migrator().DropTable(&db.User{}, &db.RegistrationCode{}, &db.UserRole{}, &db.Role{}, &db.RoleScope{})
 	require.NoError(t, err)
 
 	// Auto migrate the schema
-	err = gormDB.AutoMigrate(&db.User{}, &db.RegistrationCode{})
+	err = gormDB.AutoMigrate(&db.User{}, &db.RegistrationCode{}, &db.UserRole{}, &db.Role{}, &db.RoleScope{})
 	require.NoError(t, err)
+
+	// Create test role
+	testRole := db.Role{
+		Description: "Test role for registration",
+	}
+	if err := gormDB.Create(&testRole).Error; err != nil {
+		t.Fatalf("Failed to create test role: %v", err)
+	}
+
+	// Create test role scope
+	testRoleScope := db.RoleScope{
+		RoleID: testRole.ID,
+		Scope:  "test_scope",
+	}
+	if err := gormDB.Create(&testRoleScope).Error; err != nil {
+		t.Fatalf("Failed to create test role scope: %v", err)
+	}
 
 	return gormDB
 }
@@ -36,7 +53,13 @@ func setupTestDB(t *testing.T) *gorm.DB {
 func setupTestRouter(t *testing.T) (*gin.Engine, *AccountHandler) {
 	gormDB := setupTestDB(t)
 
-	registrationManager := bizRegister.NewRegistrationManager(gormDB, 3)
+	// Get the test role ID
+	var testRole db.Role
+	if err := gormDB.Where("description = ?", "Test role for registration").First(&testRole).Error; err != nil {
+		t.Fatalf("Failed to get test role: %v", err)
+	}
+
+	registrationManager := bizRegister.NewRegistrationManager(gormDB, 3, testRole.ID)
 	responseFactory := apiHandlers.Initialize()
 	accountHandler := InitializeAccountHandler(registrationManager, responseFactory)
 
